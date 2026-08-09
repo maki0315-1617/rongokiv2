@@ -2,14 +2,12 @@
 name = "rongokiv2"
 compatibility_date = "2026-08-09"
 
-# ★ここが重要：プログラムの開始点を指定します
 main = "src/index.js"
 
 [assets]
 directory = "./dist"
-binding = "ASSETS"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "my-production-db"
+database_name = "rongokiv2-db"
 database_id = "b010e09e-2fa5-4be2-8ac1-e2348df64ac2"

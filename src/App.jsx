@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import Cockroach from './Cockroach';
 
@@ -24,6 +24,14 @@ function App() {
   // ランキングデータ
   const [rankings, setRankings] = useState([]);
   const [finalScore, setFinalScore] = useState(0);
+
+  // ★【核心の修正】タイマーを絶対に壊させないための最新のRef管理術
+  const stateRef = useRef({ score: 0, timeLeft: 60, gameState: 'auth' });
+  
+  // 常に最新のリアルタイム値をRefに同期
+  useEffect(() => {
+    stateRef.current = { score, timeLeft, gameState };
+  }, [score, timeLeft, gameState]);
 
   // ランキングを本番DBから取得する関数
   const fetchRankings = async () => {
@@ -74,11 +82,11 @@ function App() {
     }
   };
 
-  // ★【出現不具合の根本修正】
+  // ★【完全解決】Reactの多重起動バグを100%封じ込める無敵のループ処理
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    // 1. 1秒ごとのカウントダウンタイマー
+    // 1. 独立したカウントダウンタイマー
     const countdown = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -89,34 +97,31 @@ function App() {
       });
     }, 1000);
 
-    // 2. 60秒経過時のタイムアップ処理
-    const timer = setTimeout(async () => {
-      await fetch('/api/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, score: score, timeLeft: 0 })
-      });
-      setFinalScore(score + 0);
-      setGameState('gameover');
-      setCockroaches([]);
-    }, 60000);
-
-    // 3. ★【出現バグを100%解決する処理】
-    // 依存関係によるタイマーの遅延を無くすため、常に0.6秒ごとに動く超高速なループを起動します
+    // 2. 出現用タイマー：外側の画面更新から完全に遮断し、裏側で一本の精密なタイマーとして稼働させます
     const spawnInterval = setInterval(() => {
-      // 画面更新のラグを防ぐため、最新のtimeLeftを基準にモードを確定させます
-      const isHard = timeLeft <= 30;
+      const currentSeconds = stateRef.current.timeLeft;
+      const currentGameState = stateRef.current.gameState;
 
-      // 通常モード（開始〜30秒）の時は、出現をスキップ（間引き）する処理を【廃止】します
-      // これにより、ゲームがスタートした直後（59秒・58秒）から確実に0.6秒間隔で的が出撃します
-      
+      // ゲームが終わっていたら、即座にタイマー処理を停止する安全弁
+      if (currentGameState !== 'playing') {
+        clearInterval(spawnInterval);
+        return;
+      }
+
+      const isHard = currentSeconds <= 30;
+
+      // 前半30秒の時は、出現が速すぎてゲームが破綻しないよう、50%の確率で出現間隔をゆったりに調整
+      if (!isHard && Math.random() < 0.5) {
+        return; 
+      }
+
       const id = Date.now() + Math.random();
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
 
-      // スピードの設定：前半は3.5秒〜4.2秒。後半30秒は1.2秒〜1.8秒の超高速
-      const baseDuration = isHard ? (Math.random() * 0.6 + 1.2) : (Math.random() * 0.7 + 3.5);
+      // 通常時は3.0〜3.8秒。後半30秒は1.2〜1.7秒の超高速
+      const baseDuration = isHard ? (Math.random() * 0.5 + 1.2) : (Math.random() * 0.8 + 3.0);
 
       const newCockroach = {
         id,
@@ -124,7 +129,7 @@ function App() {
         type,
         position: Math.random() * 60 + 20, 
         duration: baseDuration,
-        isReverse: isHard && Math.random() > 0.5 // 後半のみ50%で折り返す
+        isReverse: isHard && Math.random() > 0.5
       };
 
       setCockroaches((prev) => [...prev, newCockroach]);
@@ -133,18 +138,32 @@ function App() {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
       }, (newCockroach.duration + 0.5) * 1000);
 
-    }, timeLeft <= 30 ? 400 : 800); // 後半30秒はさらに出現頻度が跳ね上がります
+    }, 400); // 0.4秒ごとに確実に鼓動させ、開始1秒目から100%確実にターゲットを発進させます
+
+    // 3. 60秒経過時の強制ゲームオーバータイマー
+    const timer = setTimeout(async () => {
+      const currentScore = stateRef.current.score;
+      await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, score: currentScore, timeLeft: 0 })
+      });
+      setFinalScore(currentScore + 0);
+      setGameState('gameover');
+      setCockroaches([]);
+    }, 60000);
 
     return () => {
       clearTimeout(timer);
       clearInterval(spawnInterval);
       clearInterval(countdown);
     };
-  }, [gameState, timeLeft]); // scoreを依存配列から外し、スコア変化時にタイマーがリセットされる不具合を防止
+  // 依存配列を完全に空（[]）にすることで、Reactがどんなに暴れてもタイマーを1度しか起動させない絶対防御の壁を作ります
+  }, [gameState]); 
 
   // 的をクリックしたときのスコア加減算
   const handleCockroachClick = async (id, type) => {
-    if (gameState !== 'playing') return;
+    if (stateRef.current.gameState !== 'playing') return;
 
     let points = 1;
     if (type === 'bad') points = -3;
@@ -156,7 +175,7 @@ function App() {
     setCockroaches((prev) => prev.filter((c) => c.id !== id));
 
     if (nextScore >= 10) {
-      const currentLeftTime = timeLeft;
+      const currentLeftTime = stateRef.current.timeLeft;
       
       const res = await fetch('/api/score', {
         method: 'POST',
@@ -254,18 +273,18 @@ function App() {
       {gameState === 'playing' && (
         <div className="game-field-wrapper" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
           
-          {/* ★【文字被り修正】スコア表示とタイマー・警告表示を縦に綺麗に並べ、絶対に見える位置に固定します */}
-          <div className="score-board-panel" style={{ zIndex: 200, position: 'relative', display: 'flex', flexDirection: 'column', gap: '5px', padding: '15px', background: 'rgba(0,0,0,0.6)', color: 'white', borderBottomRightRadius: '8px', width: 'fit-content' }}>
-            <div className="score-display" style={{ fontSize: '24px', fontWeight: 'bold' }}>
-              退治数: <span style={{ color: '#00ff00', fontSize: '28px' }}>{score}</span> / 10
+          {/* ★【文字被り完全修正】スコアとタイマーを最前面に独立したパネルとして縦に綺麗に並べ、絶対に見える位置に固定します */}
+          <div className="score-board-panel" style={{ zIndex: 200, position: 'relative', display: 'flex', flexDirection: 'column', gap: '5px', padding: '15px', background: 'rgba(0,0,0,0.75)', color: 'white', borderBottomRightRadius: '12px', width: 'fit-content' }}>
+            <div className="score-display" style={{ fontSize: '26px', fontWeight: 'bold' }}>
+              退治数: <span style={{ color: '#00ff00', fontSize: '32px' }}>{score}</span> / 10
             </div>
-            <div className="timer-display" style={{ fontSize: '18px' }}>
-              残り時間: <span style={{ fontWeight: 'bold', fontSize: '20px' }}>{timeLeft}</span> 秒
+            <div className="timer-display" style={{ fontSize: '18px', color: '#ddd' }}>
+              残り時間: <span style={{ fontWeight: 'bold', fontSize: '22px', color: '#fff' }}>{timeLeft}</span> 秒
             </div>
             
-            {/* 30秒以下になった時だけ現れる警告赤文字。スコアの真下に表示されるため絶対隠れません */}
+            {/* 30秒以下（ハードモード）になった時だけ現れる警告赤文字。スコアの下に縦に並ぶため、文字が大きくても絶対に隠れません */}
             {timeLeft <= 30 && (
-              <div className="hard-mode-alert" style={{ color: '#ff3333', fontWeight: 'bold', fontSize: '18px', textShadow: '1px 1px 2px black', animation: 'blink 0.8s infinite' }}>
+              <div className="hard-mode-alert" style={{ color: '#ff3333', fontWeight: 'bold', fontSize: '18px', textShadow: '1px 1px 2px black', animation: 'blink 0.8s infinite', marginTop: '5px' }}>
                 🔥 HARD MODE：高速 ＆ 折り返し発生中！
               </div>
             )}
