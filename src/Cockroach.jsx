@@ -2,55 +2,46 @@ import React from 'react';
 import './Cockroach.css';
 
 function Cockroach({ id, direction, type, position, duration, className, onClick }) {
-  // タイプごとに色を分ける（画像がなくても判別可能にする）
-  let backgroundColor = '#8B4513'; // 通常：茶色
-  let label = 'ゴキ';
+  // ★ public/images/ 配下の固定URLを直接指定することで、ビルド時の暗号化を完全に回避します
+  let imageSrc = '/images/cockroach.png';
+  let altText = 'ゴキブリ';
+
   if (type === 'bad') {
-    backgroundColor = '#FF0000'; // バッド：赤色
-    label = 'バッド';
+    imageSrc = '/images/cockroach_bad.png';
+    altText = 'バッドゴキブリ';
   }
   if (type === 'special') {
-    backgroundColor = '#FFD700'; // スペシャル：金色
-    label = 'レア';
+    imageSrc = '/images/cockroach_special.png';
+    altText = 'スペシャルゴキブリ';
   }
 
-  // 動きのアニメーションスタイル
   const style = {
     animationDuration: `${duration}s`,
-    backgroundColor: backgroundColor,
-    color: '#fff',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '50%',
-    width: '40px',
-    height: '40px',
-    cursor: 'pointer',
     position: 'absolute',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+    cursor: 'pointer',
     zIndex: 100,
-    userSelect: 'none'
+    userSelect: 'none',
+    width: '60px',  // ゲームとして叩きやすい適切なサイズに固定
+    height: '60px'
   };
 
   // 出現方向に応じた初期位置の設定
   if (direction === 'top' || direction === 'bottom') {
     style.left = `${position}%`;
-    style[direction] = '-50px';
+    style[direction] = '-60px';
   } else {
     style.top = `${position}%`;
-    style[direction] = '-50px';
+    style[direction] = '-60px';
   }
 
   return (
-    <div
+    <img
+      src={imageSrc}
+      alt={altText}
       className={`cockroach-unit roach-${direction} ${type} ${className || ''}`}
       style={style}
       onClick={() => onClick(id, type)}
-    >
-      {label}
-    </div>
+    />
   );
 }
 
