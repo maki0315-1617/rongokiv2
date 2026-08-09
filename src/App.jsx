@@ -25,6 +25,9 @@ export default function App() {
   
   const [roaches, setRoaches] = useState([]);
   const gameAreaRef = useRef(null);
+  
+  // 内部ロジック用のゴキブリ保持リスト（再描画を防ぐためのref）
+  const roachesDataRef = useRef([]);
 
   // ローカルストレージから進行状況の読み込み
   useEffect(() => {
@@ -50,6 +53,7 @@ export default function App() {
     setScore(0);
     setTimeLeft(config.time);
     setTargetCount(config.target);
+    roachesDataRef.current = [];
     setRoaches([]);
     setScreen('game');
   };
@@ -83,7 +87,8 @@ export default function App() {
           vx: (Math.random() - 0.5) * 4 * config.speed,
           vy: (Math.random() - 0.5) * 4 * config.speed,
         };
-        setRoaches((prev) => [...prev, newRoach]);
+        roachesDataRef.current.push(newRoach);
+        setRoaches([...roachesDataRef.current]);
       }
     }, config.interval);
 
@@ -93,7 +98,7 @@ export default function App() {
     };
   }, [screen, currentScene]);
 
-  // ゴキブリの自動移動アニメーションループ
+  // ゴキブリの自動移動アニメーションループ（DOMを直接書き換えて再描画競合を回避）
   useEffect(() => {
     if (screen !== 'game') return;
 
@@ -104,19 +109,24 @@ export default function App() {
         const maxX = area.clientWidth - 60;
         const maxY = area.clientHeight - 60;
 
-        setRoaches((prevRoaches) =>
-          prevRoaches.map((r) => {
-            let nextX = r.x + r.vx;
-            let nextY = r.y + r.vy;
-            let nextVx = r.vx;
-            let nextVy = r.vy;
+        roachesDataRef.current = roachesDataRef.current.map((r) => {
+          let nextX = r.x + r.vx;
+          let nextY = r.y + r.vy;
+          let nextVx = r.vx;
+          let nextVy = r.vy;
 
-            if (nextX <= 0 || nextX >= maxX) nextVx *= -1;
-            if (nextY <= 0 || nextY >= maxY) nextVy *= -1;
+          if (nextX <= 0 || nextX >= maxX) nextVx *= -1;
+          if (nextY <= 0 || nextY >= maxY) nextVy *= -1;
 
-            return { ...r, x: nextX, y: nextY, vx: nextVx, vy: nextVy };
-          })
-        );
+          // DOM要素が存在すれば直接スタイルを書き換えて高速移動させる
+          const el = document.getElementById(r.id);
+          if (el) {
+            el.style.left = `${nextX}px`;
+            el.style.top = `${nextY}px`;
+          }
+
+          return { ...r, x: nextX, y: nextY, vx: nextVx, vy: nextVy };
+        });
       }
       animationId = requestAnimationFrame(updateLoop);
     };
@@ -132,10 +142,11 @@ export default function App() {
       e.preventDefault();
     }
 
-    // まず該当のゴキブリを確実に消去
-    setRoaches((prev) => prev.filter((r) => r.id !== id));
+    // Ref配列から除外
+    roachesDataRef.current = roachesDataRef.current.filter((r) => r.id !== id);
+    setRoaches([...roachesDataRef.current]);
 
-    // スコアを加算し、目標数に達しているかチェック
+    // スコアを加算
     setScore((prev) => {
       const nextScore = prev + 1;
       if (nextScore >= targetCount) {
@@ -231,8 +242,8 @@ export default function App() {
               {roaches.map((r) => (
                 <div
                   key={r.id}
-                  onClick={(e) => handleRoachClick(r.id, e)}
-                  onTouchStart={(e) => handleRoachClick(r.id, e)}
+                  id={r.id}
+                  onPointerDown={(e) => handleRoachClick(r.id, e)}
                   style={{
                     ...styles.roach,
                     left: `${r.x}px`,
