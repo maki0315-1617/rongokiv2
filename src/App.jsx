@@ -2,27 +2,30 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import Cockroach from './Cockroach';
 
-// ★画像ファイルをViteの標準ルールで確実にインポートします
+// 画像ファイルのインポート（背景や猫の表示用）
 import trashPileImage from './images/trash_pile.png';
 import blackCatImage from './images/black_cat.png';
 
 const cockroachTypes = ['normal', 'bad', 'special'];
 
 function App() {
-  const [gameState, setGameState] = useState('auth'); 
-  const [authMode, setAuthMode] = useState('login'); 
+  const [gameState, setGameState] = useState('auth'); // auth, start, playing, clear, gameover
+  const [authMode, setAuthMode] = useState('login'); // login, register
   const [score, setScore] = useState(0);
   const [cockroaches, setCockroaches] = useState([]);
   const [timeLeft, setTimeLeft] = useState(60);
   
+  // ユーザー状態
   const [user, setUser] = useState(null); 
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
+
+  // ランキングデータ
   const [rankings, setRankings] = useState([]);
   const [finalScore, setFinalScore] = useState(0);
 
-  // ランキングを確実に相対パスで取得
+  // ランキングを本番DBから取得する関数
   const fetchRankings = async () => {
     try {
       const res = await fetch('/api/ranking');
@@ -39,6 +42,7 @@ function App() {
     fetchRankings();
   }, [gameState]);
 
+  // 会員登録・ログイン処理
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -70,9 +74,11 @@ function App() {
     }
   };
 
+  // ゲームプレイ中のタイマー管理 ＆ ターゲット自動生成
   useEffect(() => {
     if (gameState !== 'playing') return;
 
+    // 1秒ごとのカウントダウン
     const countdown = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -83,6 +89,7 @@ function App() {
       });
     }, 1000);
 
+    // 60秒経過時のタイムアップ処理
     const timer = setTimeout(async () => {
       await fetch('/api/score', {
         method: 'POST',
@@ -94,33 +101,35 @@ function App() {
       setCockroaches([]);
     }, 60000);
 
-    // ★ゴキブリの出現ロジック（確実に生成させてステートを更新）
+    // ターゲット（ゴキブリ）の出現ループ処理
     const spawnInterval = setInterval(() => {
-      const id = Date.now() + Math.random();
+      const id = Date.now() + Math.random(); // 重複を防ぐ固有ID
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
 
-      const isHardMode = timeLeft <= 30;
-      const baseDuration = isHardMode ? (Math.random() * 2.0 + 2.0) : (Math.random() * 4.0 + 6.0);
+      const isHardMode = timeLeft <= 30; // 30秒経過判定
+      
+      // ハードモード時は移動速度が超高速（2〜3.5秒）、通常は5〜8秒で横切る
+      const baseDuration = isHardMode ? (Math.random() * 1.5 + 2.0) : (Math.random() * 3.0 + 5.0);
 
       const newCockroach = {
         id,
         direction,
         type,
-        position: Math.random() * 70 + 15, // 画面外にはみ出さないよう調整
+        position: Math.random() * 60 + 20, // 画面端で消えないよう中央寄りに生成
         duration: baseDuration,
-        isReverse: isHardMode && Math.random() > 0.5
+        isReverse: isHardMode && Math.random() > 0.5 // ハードモードは50%の確率で折り返す
       };
 
       setCockroaches((prev) => [...prev, newCockroach]);
 
-      // 時間が経ったら自動消滅
+      // 画面を通り過ぎたら自動で配列から消去
       setTimeout(() => {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
-      }, (newCockroach.duration + 1.0) * 1000);
+      }, (newCockroach.duration + 0.5) * 1000);
 
-    }, timeLeft <= 30 ? 800 : 1500); // 難易度アップ時は出現速度も高速化
+    }, timeLeft <= 30 ? 700 : 1500); // 30秒経過後は出現ペースも2倍以上（0.7秒に1匹）
 
     return () => {
       clearTimeout(timer);
@@ -129,6 +138,7 @@ function App() {
     };
   }, [gameState, timeLeft, score]);
 
+  // 的をクリックしたときのスコア加減算
   const handleCockroachClick = async (id, type) => {
     if (gameState !== 'playing') return;
 
@@ -138,11 +148,15 @@ function App() {
 
     const nextScore = Math.max(0, score + points);
     setScore(nextScore);
+    
+    // クリックしたターゲットを画面から消す
     setCockroaches((prev) => prev.filter((c) => c.id !== id));
 
+    // 10匹退治でゲームクリア！
     if (nextScore >= 10) {
       const currentLeftTime = timeLeft;
       
+      // スコアデータを本番D1へ送信して保存
       const res = await fetch('/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,9 +177,9 @@ function App() {
     setGameState('playing');
   };
   return (
-    <div className={`game-container ${gameState === 'playing' ? 'game-floor' : ''}`}>
+    <div className={`game-container ${gameState === 'playing' ? 'game-floor' : ''}`} style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
 
-      {/* 🔐 認証画面 */}
+      {/* 🔐 1. ログイン / ユーザー登録 画面 */}
       {gameState === 'auth' && (
         <div className="start-screen">
           <div className="cat-header">
@@ -203,7 +217,7 @@ function App() {
         </div>
       )}
 
-      {/* 🏠 タイトル画面 */}
+      {/* 🏠 2. タイトル画面（グローバルランキング表示） */}
       {gameState === 'start' && (
         <div className="start-screen">
           <div className="cat-header">
@@ -235,10 +249,12 @@ function App() {
         </div>
       )}
 
-      {/* 🎮 プレイ画面 */}
+      {/* 🎮 3. メインプレイ画面 */}
       {gameState === 'playing' && (
-        <>
-          <div className="score-display">
+        <div className="game-field-wrapper" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
+          
+          {/* スコア・タイマー表示 */}
+          <div className="score-display" style={{ zIndex: 200, position: 'relative' }}>
             退治数: {score} / 10
             <span className={`countdown-display ${timeLeft <= 30 ? 'countdown-danger' : ''}`}>
               残り: {timeLeft} 秒 {timeLeft <= 30 ? '🔥HARD MODE' : ''}
@@ -246,11 +262,12 @@ function App() {
           </div>
 
           {timeLeft <= 30 && (
-            <div style={{ position: 'absolute', top: '70px', left: '20px', color: 'red', fontWeight: 'bold', fontSize: '22px', textShadow: '1px 1px 3px black' }}>
+            <div style={{ position: 'absolute', top: '70px', left: '20px', color: 'red', fontWeight: 'bold', fontSize: '22px', textShadow: '1px 1px 3px black', zIndex: 200 }}>
               🚨 警告：動きが速くなり、折り返す奴も出現中！
             </div>
           )}
 
+          {/* 背景のゴミ山と黒猫ロン君の配置 */}
           <div className="game-content">
             <div className="cat-header">
               <img src={blackCatImage} alt="Ron-kun" className="cat-image" />
@@ -260,7 +277,7 @@ function App() {
             </div>
           </div>
 
-          {/* ★生成されたゴキブリ配列をループして確実にコンポーネントを描画 */}
+          {/* ★ターゲットのレンダリング（基準点となる箱の直下に配置） */}
           {cockroaches.map((roach) => (
             <Cockroach
               key={roach.id}
@@ -273,10 +290,10 @@ function App() {
               onClick={handleCockroachClick}
             />
           ))}
-        </>
+        </div>
       )}
 
-      {/* 🎉 クリア画面 */}
+      {/* 🎉 4. クリア画面 */}
       {gameState === 'clear' && (
         <div className="clear-screen">
           <div className="cat-header">
@@ -290,7 +307,7 @@ function App() {
         </div>
       )}
 
-      {/* 💀 ゲームオーバー画面 */}
+      {/* 💀 5. ゲームオーバー画面 */}
       {gameState === 'gameover' && (
         <div className="clear-screen">
           <div className="cat-header">
