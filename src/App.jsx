@@ -74,12 +74,12 @@ export default function App() {
     const spawner = setInterval(() => {
       if (gameAreaRef.current) {
         const area = gameAreaRef.current;
-        const maxX = area.clientWidth - 50;
-        const maxY = area.clientHeight - 50;
+        const maxX = area.clientWidth - 60;
+        const maxY = area.clientHeight - 60;
         const newRoach = {
           id: Date.now() + Math.random(),
-          x: Math.random() * maxX,
-          y: Math.random() * maxY,
+          x: Math.random() * Math.max(maxX, 10),
+          y: Math.random() * Math.max(maxY, 10),
           vx: (Math.random() - 0.5) * 4 * config.speed,
           vy: (Math.random() - 0.5) * 4 * config.speed,
         };
@@ -101,8 +101,8 @@ export default function App() {
     const updateLoop = () => {
       if (gameAreaRef.current) {
         const area = gameAreaRef.current;
-        const maxX = area.clientWidth - 50;
-        const maxY = area.clientHeight - 50;
+        const maxX = area.clientWidth - 60;
+        const maxY = area.clientHeight - 60;
 
         setRoaches((prevRoaches) =>
           prevRoaches.map((r) => {
@@ -113,11 +113,6 @@ export default function App() {
 
             if (nextX <= 0 || nextX >= maxX) nextVx *= -1;
             if (nextY <= 0 || nextY >= maxY) nextVy *= -1;
-
-            if (Math.random() < 0.04) {
-              nextVx += (Math.random() - 0.5) * 2;
-              nextVy += (Math.random() - 0.5) * 2;
-            }
 
             return { ...r, x: nextX, y: nextY, vx: nextVx, vy: nextVy };
           })
@@ -130,9 +125,10 @@ export default function App() {
     return () => cancelAnimationFrame(animationId);
   }, [screen]);
 
-  // ゴキブリタップ時のスコア加算処理
+  // ゴキブリタップ時の処理
   const handleRoachClick = (id, e) => {
-    e.stopPropagation(); // 画面全体の余白クリック判定との競合を防ぐ
+    e.stopPropagation();
+    
     setScore((prev) => {
       const nextScore = prev + 1;
       if (nextScore >= targetCount) {
@@ -183,7 +179,7 @@ export default function App() {
           </div>
         )}
 
-        {/* メニュー・シーン選択画面 */}
+        {/* メニュー画面 */}
         {screen === 'menu' && (
           <div>
             <img 
@@ -228,16 +224,19 @@ export default function App() {
               {roaches.map((r) => (
                 <div
                   key={r.id}
-                  onClick={(e) => handleRoachClick(r.id, e)}
-                  onTouchStart={(e) => handleRoachClick(r.id, e)}
+                  onPointerDown={(e) => handleRoachClick(r.id, e)}
                   style={{
                     ...styles.roach,
                     left: `${r.x}px`,
                     top: `${r.y}px`,
                   }}
                 >
-                  {/* 画像の代わりに確実に見えてタップできる絵文字を表示 */}
-                  🪳
+                  {/* 本物の昆虫・ゴキブリ系の明確なアイコン画像を使用 */}
+                  <img 
+                    src="https://cdn-icons-png.flaticon.com/512/3067/3067444.png" 
+                    alt="ゴキブリ" 
+                    style={{ width: '100%', height: '100%', pointerEvents: 'none' }} 
+                  />
                 </div>
               ))}
             </div>
@@ -321,18 +320,13 @@ const styles = {
     border: '2px solid #335533',
     borderRadius: '8px',
     overflow: 'hidden',
-    touchAction: 'manipulation'
+    touchAction: 'none'
   },
   roach: {
     position: 'absolute',
-    width: '50px',
-    height: '50px',
+    width: '55px',
+    height: '55px',
     cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '36px',
-    transform: 'translate(-50%, -50%)',
     userSelect: 'none',
     zIndex: 10
   }
