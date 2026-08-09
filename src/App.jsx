@@ -7,38 +7,73 @@ import blackCatImage from './images/black_cat.png';
 const cockroachTypes = ['normal', 'bad', 'special'];
 
 function App() {
-  const [gameState, setGameState] = useState('start');
+  const [gameState, setGameState] = useState('auth'); 
+  const [authMode, setAuthMode] = useState('login'); 
   const [score, setScore] = useState(0);
   const [cockroaches, setCockroaches] = useState([]);
-  const [startTime, setStartTime] = useState(null);
-  const [clearTime, setClearTime] = useState(null);
-  const [history, setHistory] = useState([]);
-
-  // カウントダウン
   const [timeLeft, setTimeLeft] = useState(60);
+  
+  const [user, setUser] = useState(null); 
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [rankings, setRankings] = useState([]);
+  const [finalScore, setFinalScore] = useState(0);
 
-  // ⭐ 星システム
-  const [stars, setStars] = useState(0);
-  const [finalCelebration, setFinalCelebration] = useState(false);
-
-  // 🎁 ギフト画面
-  const [giftScreen, setGiftScreen] = useState(false);
+  // D1データベースからリアルタイムランキングを取得する関数
+  const fetchRankings = async () => {
+    try {
+      const res = await fetch('/api/ranking');
+      if (res.ok) {
+        const data = await res.json();
+        setRankings(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch rankings", e);
+    }
+  };
 
   useEffect(() => {
-    const savedHistory = localStorage.getItem('gameHistory');
-    if (savedHistory) {
-      try {
-        setHistory(JSON.parse(savedHistory));
-      } catch (e) {
-        console.error('Failed to parse history', e);
-      }
-    }
-  }, []);
+    fetchRankings();
+  }, [gameState]);
 
+  // ユーザー登録 ＆ ログイン処理の関数
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: usernameInput, password: passwordInput })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAuthError(data.error || '認証エラーが発生しました');
+        return;
+      }
+
+      if (authMode === 'register') {
+        alert('ユーザー登録が完了しました！ログインしてください。');
+        setAuthMode('login');
+        setPasswordInput('');
+      } else {
+        setUser({ id: data.userId, username: data.username });
+        setGameState('start');
+      }
+    } catch (e) {
+      setAuthError('サーバーとの通信に失敗しました');
+    }
+  };
+
+  // ゲームプレイ中のタイマー・ゴキブリ出現処理
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    // カウントダウン
+    // 残り秒数のカウントダウン
     const countdown = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -49,40 +84,36 @@ function App() {
       });
     }, 1000);
 
-    // 60秒でゲームオーバー
-    const timer = setTimeout(() => {
-      const now = new Date();
-      const dateTimeString =
-        `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ` +
-        `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-
-      const record = {
-        dateTime: dateTimeString,
-        seconds: 0,
-        isGameOver: true
-      };
-
-      const updatedHistory = [record, ...history].slice(0, 3);
-      setHistory(updatedHistory);
-      localStorage.setItem('gameHistory', JSON.stringify(updatedHistory));
-
+    // 60秒が経過したときのゲームオーバー処理
+    const timer = setTimeout(async () => {
+      await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, score: score, timeLeft: 0 })
+      });
+      setFinalScore(score + 0);
       setGameState('gameover');
       setCockroaches([]);
     }, 60000);
 
-    // ゴキブリ生成
+    // ゴキブリの自動生成ロジック
     const spawnInterval = setInterval(() => {
       const id = Date.now();
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
 
+      // 30秒経過（残り30秒以下）で難しくなる判定
+      const isHardMode = timeLeft <= 30;
+      const baseDuration = isHardMode ? (Math.random() * 3.0 + 3.0) : (Math.random() * 6.0 + 10.0);
+
       const newCockroach = {
         id,
         direction,
         type,
         position: Math.random() * 80 + 10,
-        duration: Math.random() * 6.0 + 10.0,
+        duration: baseDuration,
+        isReverse: isHardMode && Math.random() > 0.5 // ハードモードは50%で折り返す
       };
 
       setCockroaches((prev) => [...prev, newCockroach]);
@@ -91,244 +122,146 @@ function App() {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
       }, (newCockroach.duration + 2.0) * 1000);
 
-    }, 2000);
+    }, timeLeft <= 30 ? 1000 : 2000); // 30秒後は2倍出現する
 
     return () => {
       clearTimeout(timer);
       clearInterval(spawnInterval);
       clearInterval(countdown);
     };
-  }, [gameState, history]);
+  }, [gameState, timeLeft, score]);
 
-  // ゴキクリック処理
-  const handleCockroachClick = (id, type) => {
+  // ゴキブリをクリック（叩いた）ときの処理
+  const handleCockroachClick = async (id, type) => {
     if (gameState !== 'playing') return;
 
-    setScore((prevScore) => {
-      let points = 1;
-      if (type === 'bad') points = -3;
-      if (type === 'special') points = 2;
+    let points = 1;
+    if (type === 'bad') points = -3;
+    if (type === 'special') points = 2;
 
-      const nextScore = Math.max(0, prevScore + points);
-
-      if (nextScore >= 10) {
-        const endTime = Date.now();
-        const durationSeconds = ((endTime - startTime) / 1000).toFixed(2);
-
-        const now = new Date();
-        const dateTimeString =
-          `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ` +
-          `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-
-        const record = {
-          dateTime: dateTimeString,
-          seconds: durationSeconds,
-          isGameOver: false
-        };
-
-        const updatedHistory = [record, ...history].slice(0, 3);
-        setHistory(updatedHistory);
-        localStorage.setItem('gameHistory', JSON.stringify(updatedHistory));
-
-        // ⭐ 星付与ロジック
-        if (durationSeconds < 60) {
-          const recent = updatedHistory.slice(0, 3);
-          const allClear = recent.length === 3 && recent.every(r => !r.isGameOver);
-
-          if (allClear) {
-            setStars(prev => {
-              const newStars = prev + 1;
-
-              if (newStars >= 3) {
-                setFinalCelebration(true);
-              }
-
-              return newStars;
-            });
-          }
-        }
-
-        setClearTime(durationSeconds);
-        setGameState('clear');
-        setCockroaches([]);
-      }
-
-      return nextScore;
-    });
-
+    const nextScore = Math.max(0, score + points);
+    setScore(nextScore);
     setCockroaches((prev) => prev.filter((c) => c.id !== id));
+
+    // 10匹退治したら即座にクリア
+    if (nextScore >= 10) {
+      const currentLeftTime = timeLeft;
+      
+      // スコアデータを送信
+      const res = await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, score: nextScore, timeLeft: currentLeftTime })
+      });
+      const data = await res.json();
+
+      setFinalScore(data.totalPoint);
+      setGameState('clear');
+      setCockroaches([]);
+    }
   };
 
   const startGame = () => {
     setScore(0);
     setCockroaches([]);
-    setStartTime(Date.now());
-    setClearTime(null);
     setTimeLeft(60);
     setGameState('playing');
   };
-
-  const backToTitle = () => {
-    setGameState('start');
-  };
-
   return (
     <div className={`game-container ${gameState === 'playing' ? 'game-floor' : ''}`}>
 
-      {/* 🎁 ギフト受け取り画面 */}
-      {giftScreen && (
-        <div className="clear-screen">
-          <div className="cat-header">
-            <img src={blackCatImage} alt="Ron-kun the Black Cat" className="cat-image" />
-          </div>
-
-          <h1 style={{ color: 'gold' }}>🎁 ギフトを受け取りました！</h1>
-          <p>ロン君からのスペシャルギフトです！</p>
-
-          <button
-            className="start-button"
-            onClick={() => {
-              setGiftScreen(false);
-              setGameState('start');
-            }}
-          >
-            トップ画面へ戻る
-          </button>
-
-          <button
-            className="start-button"
-            style={{ marginTop: '10px', backgroundColor: '#555' }}
-            onClick={() => {
-              setGiftScreen(false);
-              setGameState('gameover');
-            }}
-          >
-            ゲーム終了画面へ
-          </button>
-        </div>
-      )}
-
-      {/* ⭐ 最終お祝い画面 */}
-      {finalCelebration && !giftScreen && (
-        <div className="clear-screen">
-          <div className="cat-header">
-            <img src={blackCatImage} alt="Ron-kun the Black Cat" className="cat-image" />
-          </div>
-
-          <h1 style={{ color: 'gold' }}>🎉 おめでとう！ 🎉</h1>
-          <p>3回連続で1分以内クリアしました！</p>
-          <p style={{ fontSize: '40px' }}>⭐ ⭐ ⭐</p>
-          <p>スペシャルギフトをプレゼント！</p>
-
-          <button
-            className="start-button"
-            onClick={() => {
-              setGiftScreen(true);
-              setFinalCelebration(false);
-            }}
-          >
-            ギフトを受け取る
-          </button>
-
-          <button
-            className="start-button"
-            style={{ marginTop: '10px' }}
-            onClick={() => {
-              setStars(0);
-              setFinalCelebration(false);
-              setGameState('start');
-            }}
-          >
-            タイトルへ戻る
-          </button>
-        </div>
-      )}
-
-      {/* タイトル画面 */}
-      {gameState === 'start' && !finalCelebration && !giftScreen && (
+      {/* 🔐 ログイン / ユーザー登録 画面 */}
+      {gameState === 'auth' && (
         <div className="start-screen">
           <div className="cat-header">
-            <img src={blackCatImage} alt="Ron-kun the Black Cat" className="cat-image" />
+            <img src={blackCatImage} alt="Ron-kun" className="cat-image" />
           </div>
+          <h1>ロン君のゴキ退治 v2</h1>
+          <h3>{authMode === 'login' ? 'ログイン' : '新規ユーザー登録'}</h3>
+          
+          <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px', margin: '0 auto' }}>
+            <input
+              type="text"
+              placeholder="ユーザー名 (半角英数字)"
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', color: '#000', background: '#fff' }}
+              required
+            />
+            <input
+              type="password"
+              placeholder="パスワード"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', color: '#000', background: '#fff' }}
+              required
+            />
+            {authError && <p style={{ color: 'red', margin: 0 }}>{authError}</p>}
+            <button type="submit" className="start-button">
+              {authMode === 'login' ? 'ログインして開始' : '登録する'}
+            </button>
+          </form>
 
-          <h1>ロン君のゴキ退治</h1>
-          <p className="instruction-text">1分以内でゴキを10匹退治してね</p>
-
-          {/* ⭐ 星表示 */}
-          {stars > 0 && (
-            <p style={{ fontSize: '24px', color: 'gold' }}>
-              現在の星：{'⭐'.repeat(stars)}
-            </p>
-          )}
-
-          {/* ⭐ ギフト案内 */}
-          <p style={{ fontSize: '20px', marginTop: '10px', color: 'gold' }}>
-            星を3個獲得してギフトをもらおう！
+          <p style={{ marginTop: '20px', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
+            {authMode === 'login' ? '新規アカウントを作成する' : '既にアカウントをお持ちの方はこちら'}
           </p>
+        </div>
+      )}
+
+      {/* 🏠 タイトル・待機画面（ランキング表示） */}
+      {gameState === 'start' && (
+        <div className="start-screen">
+          <div className="cat-header">
+            <img src={blackCatImage} alt="Ron-kun" className="cat-image" />
+          </div>
+          <h1>ロン君のゴキ退治 v2</h1>
+          <p>ようこそ、<strong>{user?.username}</strong> さん！</p>
+          <p className="instruction-text">1分以内で10匹退治せよ！<br/>【得点 ＝ スコア ＋ 残り秒数】のガチバトル！</p>
+          <p style={{ color: 'orange', fontWeight: 'bold' }}>⚠️ 30秒を過ぎるとゴキブリが凶暴化（高速・折り返し移動）します！</p>
 
           <button className="start-button" onClick={startGame}>ゲームスタート</button>
 
-          <div className="history-section">
-            <h3>過去のクリア記録 (直近3回)</h3>
-            {history.length === 0 ? (
-              <p>まだ記録はありません</p>
+          <div className="history-section" style={{ marginTop: '30px' }}>
+            <h3>総合トップ10 ランキング</h3>
+            {rankings.length === 0 ? (
+              <p>まだ記録がありません。最初の勝者になろう！</p>
             ) : (
-              <ul>
-                {history.map((item, index) => (
-                  <li key={index} style={{ color: item.isGameOver ? 'red' : 'inherit' }}>
-                    {item.dateTime} - {item.isGameOver ? 'ゲームオーバー' : `タイム: ${item.seconds}秒`}
+              <ol style={{ textAlign: 'left', maxWidth: '400px', margin: '0 auto' }}>
+                {rankings.map((r, i) => (
+                  <li key={i} style={{ marginBottom: '5px', padding: '5px', borderBottom: '1px solid #ddd' }}>
+                    <strong>{i + 1}位: {r.username}</strong> - <span style={{ color: 'gold', fontWeight: 'bold' }}>{r.total_point}点</span>
+                    <br/>
+                    <small style={{ color: '#666' }}>(退治: {r.score}匹 / 残り: {r.time_left}秒)</small>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
           </div>
         </div>
       )}
 
-      {/* プレイ画面 */}
+      {/* 🎮 プレイ画面 */}
       {gameState === 'playing' && (
         <>
           <div className="score-display">
-            スコア: {score} / 10
-            <span
-              className={
-                timeLeft <= 5
-                  ? 'countdown-display countdown-danger'
-                  : timeLeft <= 10
-                  ? 'countdown-display countdown-warning'
-                  : 'countdown-display'
-              }
-            >
-              残り: {timeLeft} 秒
+            退治数: {score} / 10
+            <span className={`countdown-display ${timeLeft <= 30 ? 'countdown-danger' : ''}`}>
+              残り: {timeLeft} 秒 {timeLeft <= 30 ? '🔥HARD MODE' : ''}
             </span>
           </div>
 
-          {timeLeft <= 10 && (
-            <div style={{
-              position: 'absolute',
-              top: '60px',
-              left: '20px',
-              color: 'red',
-              fontWeight: 'bold',
-              fontSize: '20px',
-              textShadow: '1px 1px 3px black'
-            }}>
-              急いで！あと {timeLeft} 秒！
+          {timeLeft <= 30 && (
+            <div style={{ position: 'absolute', top: '70px', left: '20px', color: 'red', fontWeight: 'bold', fontSize: '22px', textShadow: '1px 1px 3px black' }}>
+              🚨 警告：動きが速くなり、折り返す奴も出現中！
             </div>
           )}
 
           <div className="game-content">
-            <p className="warning-text">注意：バットゴキブリはマイナスになるから気を付けて！</p>
             <div className="cat-header">
-              <img src={blackCatImage} alt="Ron-kun the Black Cat" className="cat-image" />
+              <img src={blackCatImage} alt="Ron-kun" className="cat-image" />
             </div>
-
             <div className="garbage-display">
-              <img
-                src={trashPileImage}
-                alt="Trash Pile"
-                className="garbage-image"
-              />
+              <img src={trashPileImage} alt="Trash Pile" className="garbage-image" />
             </div>
           </div>
 
@@ -340,35 +273,38 @@ function App() {
               type={roach.type}
               position={roach.position}
               duration={roach.duration}
+              className={roach.isReverse ? 'roach-reverse' : ''}
               onClick={handleCockroachClick}
             />
           ))}
         </>
       )}
 
-      {/* クリア画面 */}
-      {gameState === 'clear' && !finalCelebration && !giftScreen && (
+      {/* 🎉 クリア画面 */}
+      {gameState === 'clear' && (
         <div className="clear-screen">
           <div className="cat-header">
-            <img src={blackCatImage} alt="Ron-kun the Black Cat" className="cat-image" />
+            <img src={blackCatImage} alt="Ron-kun" className="cat-image" />
           </div>
-          <h1>ゲームクリア！！</h1>
-          <p>クリアタイム: <strong>{clearTime}</strong> 秒</p>
-          <button className="start-button" onClick={startGame}>もう一度プレイ</button>
-          <button className="start-button" style={{ marginTop: '10px', backgroundColor: '#555' }} onClick={backToTitle}>タイトルに戻る</button>
+          <h1 style={{ color: 'gold' }}>🎉 任務完了（クリア）！！ 🎉</h1>
+          <p style={{ fontSize: '24px' }}>獲得ポイント: <strong style={{ color: 'orange', fontSize: '32px' }}>{finalScore}</strong> 点</p>
+          <p>(スコア + 残り秒数の合算値)</p>
+          <button className="start-button" onClick={startGame}>もう一度競う</button>
+          <button className="start-button" style={{ marginTop: '10px', backgroundColor: '#555' }} onClick={() => setGameState('start')}>ランキングを見る</button>
         </div>
       )}
 
-      {/* ゲームオーバー画面 */}
-      {gameState === 'gameover' && !giftScreen && (
+      {/* 💀 ゲームオーバー画面 */}
+      {gameState === 'gameover' && (
         <div className="clear-screen">
           <div className="cat-header">
-            <img src={blackCatImage} alt="Ron-kun the Black Cat" className="cat-image" />
+            <img src={blackCatImage} alt="Ron-kun" className="cat-image" />
           </div>
-          <h1 style={{ color: 'red' }}>ゲームオーバー</h1>
-          <p>1分が経過しました...</p>
-          <button className="start-button" onClick={startGame}>もう一度プレイ</button>
-          <button className="start-button" style={{ marginTop: '10px', backgroundColor: '#555' }} onClick={backToTitle}>タイトルに戻る</button>
+          <h1 style={{ color: 'red' }}>⏰ タイムアップ</h1>
+          <p>1分が経過しました。しかしスコアは保存されました！</p>
+          <p style={{ fontSize: '22px' }}>獲得ポイント: <strong>{finalScore}</strong> 点</p>
+          <button className="start-button" onClick={startGame}>リベンジする</button>
+          <button className="start-button" style={{ marginTop: '10px', backgroundColor: '#555' }} onClick={() => setGameState('start')}>ランキングを見る</button>
         </div>
       )}
     </div>
