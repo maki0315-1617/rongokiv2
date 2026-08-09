@@ -27,10 +27,15 @@ function App() {
 
   // Strict Modeによるタイマー破壊を完全に防ぐためのRef管理
   const stateRef = useRef({ score: 0, timeLeft: 60, gameState: 'auth' });
-  
+  const userRef = useRef(null);
+
   useEffect(() => {
     stateRef.current = { score, timeLeft, gameState };
   }, [score, timeLeft, gameState]);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   // ランキングを本番DBから取得する関数
   const fetchRankings = async () => {
@@ -85,33 +90,26 @@ function App() {
   useEffect(() => {
     if (gameState !== 'playing') return;
 
+    let active = true;
     const roachTimeouts = [];
 
-    // 1. カウントダウンタイマー
     const countdown = setInterval(() => {
+      if (!active) return;
       setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdown);
-          return 0;
-        }
+        if (prev <= 1) return 0;
         return prev - 1;
       });
     }, 1000);
 
-    // 2. ゴキブリ出現
     const spawnCockroach = () => {
+      if (!active || stateRef.current.gameState !== 'playing') return;
+
       const currentSeconds = stateRef.current.timeLeft;
-      const currentGameState = stateRef.current.gameState;
-
-      if (currentGameState !== 'playing') return;
-
       const isHard = currentSeconds <= 30;
 
-      if (!isHard && Math.random() < 0.5) {
-        return;
-      }
+      if (!isHard && Math.random() < 0.35) return;
 
-      const id = Date.now() + Math.random();
+      const id = `${Date.now()}-${Math.random()}`;
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
@@ -129,23 +127,29 @@ function App() {
       setCockroaches((prev) => [...prev, newCockroach]);
 
       const removeTimeout = setTimeout(() => {
+        if (!active) return;
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
       }, (newCockroach.duration + 0.5) * 1000);
       roachTimeouts.push(removeTimeout);
     };
 
     spawnCockroach();
-    const spawnInterval = setInterval(spawnCockroach, 400);
+    const spawnInterval = setInterval(spawnCockroach, 350);
 
-    // 3. 60秒経過時の強制ゲームオーバー
     const timer = setTimeout(async () => {
+      if (!active) return;
       const currentScore = stateRef.current.score;
-      if (user?.id) {
-        await fetch('/api/score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, score: currentScore, timeLeft: 0 }),
-        });
+      const currentUser = userRef.current;
+      if (currentUser?.id) {
+        try {
+          await fetch('/api/score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, score: currentScore, timeLeft: 0 }),
+          });
+        } catch (e) {
+          console.error('Failed to save score', e);
+        }
       }
       setFinalScore(currentScore);
       setGameState('gameover');
@@ -153,42 +157,49 @@ function App() {
     }, 60000);
 
     return () => {
+      active = false;
       clearTimeout(timer);
       clearInterval(spawnInterval);
       clearInterval(countdown);
       roachTimeouts.forEach(clearTimeout);
     };
-  }, [gameState, user]);
+  }, [gameState]);
 
-  // 的をクリックしたときのスコア加減算（面積が確保されたため、確実に動きます）
-  const handleCockroachClick = async (id, type) => {
+  const handleCockroachClick = (id, type) => {
     if (stateRef.current.gameState !== 'playing') return;
 
     let points = 1;
     if (type === 'bad') points = -3;
     if (type === 'special') points = 2;
 
+    setCockroaches((prev) => prev.filter((c) => c.id !== id));
+
     setScore((prevScore) => {
       const nextScore = Math.max(0, prevScore + points);
 
-      // スコア計算を即時評価して10匹退治時にクリアさせる
       if (nextScore >= 10) {
         const currentLeftTime = stateRef.current.timeLeft;
-        
-        fetch('/api/score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, score: nextScore, timeLeft: currentLeftTime })
-        }).then(res => res.json()).then(data => {
-          setFinalScore(data.totalPoint);
-          setGameState('clear');
-          setCockroaches([]);
-        });
+        const currentUser = userRef.current;
+
+        if (currentUser?.id) {
+          fetch('/api/score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, score: nextScore, timeLeft: currentLeftTime }),
+          })
+            .then((res) => res.json())
+            .then((data) => setFinalScore(data.totalPoint ?? nextScore + currentLeftTime))
+            .catch(() => setFinalScore(nextScore + currentLeftTime));
+        } else {
+          setFinalScore(nextScore + currentLeftTime);
+        }
+
+        setGameState('clear');
+        setCockroaches([]);
       }
+
       return nextScore;
     });
-
-    setCockroaches((prev) => prev.filter((c) => c.id !== id));
   };
 
   const startGame = () => {
@@ -198,7 +209,7 @@ function App() {
     setGameState('playing');
   };
   return (
-    <div className={`game-container ${gameState === 'playing' ? 'game-floor' : ''}`} style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
+    <div className={`game-container ${gameState === 'playing' ? 'game-floor' : ''}`}>
 
       {/* 🔐 1. ログイン / ユーザー登録 画面 */}
       {gameState === 'auth' && (
@@ -273,17 +284,15 @@ function App() {
       {/* 🎮 3. メインプレイ画面 */}
       {gameState === 'playing' && (
         <div className="game-field-wrapper">
-          <div className="score-board-panel">
-            <div className="score-display" style={{ fontSize: '26px' }}>
-              退治数: <span style={{ color: '#00ff00', fontSize: '32px' }}>{score}</span> / 10
-            </div>
-            <div className="timer-display">
-              残り時間: <span style={{ fontWeight: 'bold', fontSize: '22px', color: '#fff' }}>{timeLeft}</span> 秒
-            </div>
+          <div className="game-hud">
+            <p className="game-hud-score">
+              退治数: <strong>{score}</strong> / 10
+            </p>
+            <p className="game-hud-timer">
+              残り時間: <strong>{timeLeft}</strong> 秒
+            </p>
             {timeLeft <= 30 && (
-              <div className="hard-mode-alert" style={{ color: '#ff3333', fontWeight: 'bold', fontSize: '16px', textShadow: '1px 1px 2px black', animation: 'blink 0.8s infinite' }}>
-                🔥 HARD MODE：高速 ＆ 折り返し発生中！
-              </div>
+              <p className="game-hud-alert">🔥 HARD MODE：高速 ＆ 折り返し発生中！</p>
             )}
           </div>
 
