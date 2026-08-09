@@ -130,8 +130,9 @@ export default function App() {
     return () => cancelAnimationFrame(animationId);
   }, [screen]);
 
-  // ゴキブリタップ時の処理
-  const handleRoachClick = (id) => {
+  // ゴキブリタップ時のスコア加算処理
+  const handleRoachClick = (id, e) => {
+    e.stopPropagation(); // 画面全体の余白クリック判定との競合を防ぐ
     setScore((prev) => {
       const nextScore = prev + 1;
       if (nextScore >= targetCount) {
@@ -217,7 +218,6 @@ export default function App() {
         {/* ゲーム画面 */}
         {screen === 'game' && (
           <div>
-            {/* スコアとタイムが重ならないように左右に配置したヘッダー */}
             <div style={styles.gameHeader}>
               <div>Stage {currentScene}</div>
               <div>退治数: {score} / {targetCount}</div>
@@ -228,16 +228,17 @@ export default function App() {
               {roaches.map((r) => (
                 <div
                   key={r.id}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    handleRoachClick(r.id);
-                  }}
+                  onClick={(e) => handleRoachClick(r.id, e)}
+                  onTouchStart={(e) => handleRoachClick(r.id, e)}
                   style={{
                     ...styles.roach,
                     left: `${r.x}px`,
                     top: `${r.y}px`,
                   }}
-                />
+                >
+                  {/* 画像の代わりに確実に見えてタップできる絵文字を表示 */}
+                  🪳
+                </div>
               ))}
             </div>
 
@@ -327,11 +328,12 @@ const styles = {
     width: '50px',
     height: '50px',
     cursor: 'pointer',
-    backgroundImage: "url('https://em-content.zobj.net/source/fluent/170/cockroach_1fab3.png')",
-    backgroundSize: 'contain',
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'center',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '36px',
     transform: 'translate(-50%, -50%)',
-    userSelect: 'none'
+    userSelect: 'none',
+    zIndex: 10
   }
 };
