@@ -101,7 +101,7 @@ function App() {
       setCockroaches([]);
     }, 60000);
 
-    // ターゲット（ゴキブリ）の出現ループ処理
+    // ★ターゲット（ゴキブリ）の出現ループ処理
     const spawnInterval = setInterval(() => {
       const id = Date.now() + Math.random(); // 重複を防ぐ固有ID
       const directions = ['top', 'bottom', 'left', 'right'];
@@ -110,14 +110,15 @@ function App() {
 
       const isHardMode = timeLeft <= 30; // 30秒経過判定
       
-      // ハードモード時は移動速度が超高速（2〜3.5秒）、通常は5〜8秒で横切る
-      const baseDuration = isHardMode ? (Math.random() * 1.5 + 2.0) : (Math.random() * 3.0 + 5.0);
+      // ★【バグ修正】通常時もCSSアニメーションが途切れない適切なスピード（3.5〜5.0秒）に加速修正
+      // ハードモード時はさらに超高速（1.5〜2.5秒）に狂暴化
+      const baseDuration = isHardMode ? (Math.random() * 1.0 + 1.5) : (Math.random() * 1.5 + 3.5);
 
       const newCockroach = {
         id,
         direction,
         type,
-        position: Math.random() * 60 + 20, // 画面端で消えないよう中央寄りに生成
+        position: Math.random() * 60 + 20, // 画面中央寄りに生成
         duration: baseDuration,
         isReverse: isHardMode && Math.random() > 0.5 // ハードモードは50%の確率で折り返す
       };
@@ -129,7 +130,8 @@ function App() {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
       }, (newCockroach.duration + 0.5) * 1000);
 
-    }, timeLeft <= 30 ? 700 : 1500); // 30秒経過後は出現ペースも2倍以上（0.7秒に1匹）
+    // ★【バランス調整】通常時は1.2秒に1匹、30秒以降のハードモードは0.6秒に1匹のハイペースで出現
+    }, isHardMode ? 600 : 1200); 
 
     return () => {
       clearTimeout(timer);
