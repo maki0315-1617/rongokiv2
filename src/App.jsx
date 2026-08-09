@@ -77,7 +77,7 @@ export default function App() {
         const maxX = area.clientWidth - 60;
         const maxY = area.clientHeight - 60;
         const newRoach = {
-          id: Date.now() + Math.random(),
+          id: 'roach_' + Date.now() + '_' + Math.random(),
           x: Math.random() * Math.max(maxX, 10),
           y: Math.random() * Math.max(maxY, 10),
           vx: (Math.random() - 0.5) * 4 * config.speed,
@@ -125,26 +125,33 @@ export default function App() {
     return () => cancelAnimationFrame(animationId);
   }, [screen]);
 
-  // ゴキブリタップ時の処理
+  // ゴキブリクリック（タップ）時のスコア加算と消去処理
   const handleRoachClick = (id, e) => {
-    e.stopPropagation();
-    
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+
+    // まず該当のゴキブリを確実に消去
+    setRoaches((prev) => prev.filter((r) => r.id !== id));
+
+    // スコアを加算し、目標数に達しているかチェック
     setScore((prev) => {
       const nextScore = prev + 1;
       if (nextScore >= targetCount) {
-        alert(`おめでとうございます！シーン ${currentScene} クリア！`);
-        if (currentScene >= maxUnlockedScene && currentScene < 10) {
-          const nextMax = currentScene + 1;
-          setMaxUnlockedScene(nextMax);
-          localStorage.setItem('ron_max_scene', nextMax);
-          setCurrentScene(nextMax);
-        }
-        setScreen('menu');
+        setTimeout(() => {
+          alert(`おめでとうございます！シーン ${currentScene} クリア！`);
+          if (currentScene >= maxUnlockedScene && currentScene < 10) {
+            const nextMax = currentScene + 1;
+            setMaxUnlockedScene(nextMax);
+            localStorage.setItem('ron_max_scene', nextMax);
+            setCurrentScene(nextMax);
+          }
+          setScreen('menu');
+        }, 50);
       }
       return nextScore;
     });
-
-    setRoaches((prev) => prev.filter((r) => r.id !== id));
   };
 
   return (
@@ -224,14 +231,14 @@ export default function App() {
               {roaches.map((r) => (
                 <div
                   key={r.id}
-                  onPointerDown={(e) => handleRoachClick(r.id, e)}
+                  onClick={(e) => handleRoachClick(r.id, e)}
+                  onTouchStart={(e) => handleRoachClick(r.id, e)}
                   style={{
                     ...styles.roach,
                     left: `${r.x}px`,
                     top: `${r.y}px`,
                   }}
                 >
-                  {/* 本物の昆虫・ゴキブリ系の明確なアイコン画像を使用 */}
                   <img 
                     src="https://cdn-icons-png.flaticon.com/512/3067/3067444.png" 
                     alt="ゴキブリ" 
