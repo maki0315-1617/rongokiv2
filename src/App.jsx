@@ -122,7 +122,7 @@ export default function App() {
 
   const handleClearData = async () => {
     if (!confirm('データを完全に削除します。よろしいですか？（不可逆）')) return;
-    const token = prompt('管理トークンを入力してください');
+    const token = prompt('１管理トークンを入力してください');
     if (!token) return alert('トークンが必須です');
 
     try {
