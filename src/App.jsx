@@ -243,17 +243,17 @@ export default function App() {
                 <div
                   key={r.id}
                   id={r.id}
-                  onPointerDown={(e) => handleRoachClick(r.id, e)}
+                  onClick={(e) => handleRoachClick(r.id, e)}
                   style={{
                     ...styles.roach,
                     left: `${r.x}px`,
                     top: `${r.y}px`,
                   }}
                 >
-                  <img 
-                    src="https://cdn-icons-png.flaticon.com/512/3067/3067444.png" 
-                    alt="ゴキブリ" 
-                    style={{ width: '100%', height: '100%', pointerEvents: 'none' }} 
+                  <img
+                    src="/images/cockroach.png"
+                    alt="ゴキブリ"
+                    style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
                   />
                 </div>
               ))}
