@@ -122,7 +122,7 @@ export default function App() {
 
   const handleClearData = async () => {
     if (!confirm('データを完全に削除します。よろしいですか？（不可逆）')) return;
-    const token = prompt('２１管理トークンを入力してください');
+    const token = prompt('管理トークンを入力してください');
     if (!token) return alert('トークンが必須です');
 
     try {
@@ -136,6 +136,28 @@ export default function App() {
       setRankings([]);
     } catch (err) {
       alert('通信エラーが発生しました');
+    }
+  };
+
+  const submitScore = async (finalScore, finalTimeLeft) => {
+    if (!userId) return;
+    try {
+      const res = await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, score: finalScore, timeLeft: finalTimeLeft }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetch('/api/ranking')
+          .then((res) => res.json())
+          .then((data) => {
+            if (Array.isArray(data)) setRankings(data);
+          })
+          .catch(() => {});
+      }
+    } catch (err) {
+      console.error('スコア送信エラー', err);
     }
   };
 
@@ -248,8 +270,7 @@ export default function App() {
             setMaxUnlockedScene(nextMax);
             localStorage.setItem('ron_max_scene', nextMax);
             setCurrentScene(nextMax);
-          }
-          setScreen('menu');
+          }          submitScore(nextScore, timeLeft);          setScreen('menu');
         }, 50);
       }
       return nextScore;
