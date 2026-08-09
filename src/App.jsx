@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import Cockroach from './Cockroach';
 
-// 画像ファイルのインポート（背景や猫の表示用）
+// 画像ファイルのインポート
 import trashPileImage from './images/trash_pile.png';
 import blackCatImage from './images/black_cat.png';
 
 const cockroachTypes = ['normal', 'bad', 'special'];
 
 function App() {
-  const [gameState, setGameState] = useState('auth'); // auth, start, playing, clear, gameover
-  const [authMode, setAuthMode] = useState('login'); // login, register
+  const [gameState, setGameState] = useState('auth'); 
+  const [authMode, setAuthMode] = useState('login'); 
   const [score, setScore] = useState(0);
   const [cockroaches, setCockroaches] = useState([]);
   const [timeLeft, setTimeLeft] = useState(60);
@@ -74,11 +74,11 @@ function App() {
     }
   };
 
-  // ゲームプレイ中のタイマー管理 ＆ ターゲット自動生成
+  // ★【バグ修正】ゲームプレイ中のタイマー管理 ＆ ターゲット自動生成
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    // 1秒ごとのカウントダウン
+    // 1. 1秒ごとのカウントダウン
     const countdown = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -89,7 +89,7 @@ function App() {
       });
     }, 1000);
 
-    // 60秒経過時のタイムアップ処理
+    // 2. 60秒経過時のタイムアップ処理
     const timer = setTimeout(async () => {
       await fetch('/api/score', {
         method: 'POST',
@@ -101,43 +101,48 @@ function App() {
       setCockroaches([]);
     }, 60000);
 
-    // ★ターゲット（ゴキブリ）の出現ループ処理
+    // 3. ★【核心のバグ修正】出現用タイマーの間隔を固定し、内部で「残り秒数」を見てリアルタイムに挙動を切り替えます
+    // これにより、ゲーム開始1秒目から確実にタイマーのスイッチが入るようになります。
     const spawnInterval = setInterval(() => {
-      const id = Date.now() + Math.random(); // 重複を防ぐ固有ID
+      const currentIsHardMode = timeLeft <= 30; // 30秒経過判定
+
+      // 通常時（最初の30秒）は40%の確率で出現をスキップさせて出現バランスを調整します
+      // これにより、固定タイマーでも「前半はゆったり、後半は大量」を完璧に再現します
+      if (!currentIsHardMode && Math.random() < 0.4) {
+        return; 
+      }
+
+      const id = Date.now() + Math.random();
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
 
-      const isHardMode = timeLeft <= 30; // 30秒経過判定
-      
-      // ★【バグ修正】通常時もCSSアニメーションが途切れない適切なスピード（3.5〜5.0秒）に加速修正
-      // ハードモード時はさらに超高速（1.5〜2.5秒）に狂暴化
-      const baseDuration = isHardMode ? (Math.random() * 1.0 + 1.5) : (Math.random() * 1.5 + 3.5);
+      // スピード調整：通常時は3.5〜4.5秒、30秒後は1.5〜2.2秒の超高速に狂暴化
+      const baseDuration = currentIsHardMode ? (Math.random() * 0.7 + 1.5) : (Math.random() * 1.0 + 3.5);
 
       const newCockroach = {
         id,
         direction,
         type,
-        position: Math.random() * 60 + 20, // 画面中央寄りに生成
+        position: Math.random() * 60 + 20, 
         duration: baseDuration,
-        isReverse: isHardMode && Math.random() > 0.5 // ハードモードは50%の確率で折り返す
+        isReverse: currentIsHardMode && Math.random() > 0.5 // 後半のみ50%で折り返す
       };
 
       setCockroaches((prev) => [...prev, newCockroach]);
 
-      // 画面を通り過ぎたら自動で配列から消去
       setTimeout(() => {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
       }, (newCockroach.duration + 0.5) * 1000);
 
-    // ★【バランス調整】通常時は1.2秒に1匹、30秒以降のハードモードは0.6秒に1匹のハイペースで出現
-    }, isHardMode ? 600 : 1200); 
+    }, 600); // 常に0.6秒間隔でプログラムを脈動させ、開始1秒目から確実に起動させます
 
     return () => {
       clearTimeout(timer);
       clearInterval(spawnInterval);
       clearInterval(countdown);
     };
+  // ★重要：残り秒数（timeLeft）が変わるたびにこの中の最新状態を正しく反映させます
   }, [gameState, timeLeft, score]);
 
   // 的をクリックしたときのスコア加減算
@@ -151,14 +156,11 @@ function App() {
     const nextScore = Math.max(0, score + points);
     setScore(nextScore);
     
-    // クリックしたターゲットを画面から消す
     setCockroaches((prev) => prev.filter((c) => c.id !== id));
 
-    // 10匹退治でゲームクリア！
     if (nextScore >= 10) {
       const currentLeftTime = timeLeft;
       
-      // スコアデータを本番D1へ送信して保存
       const res = await fetch('/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
