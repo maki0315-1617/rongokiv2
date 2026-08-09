@@ -102,10 +102,8 @@ export default {
             return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
           }
 
-          await env.DB.transaction(async (tx) => {
-            await tx.prepare('DELETE FROM rankings').run();
-            await tx.prepare('DELETE FROM users').run();
-          });
+          await env.DB.prepare('DELETE FROM rankings').run();
+          await env.DB.prepare('DELETE FROM users').run();
 
           return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         } catch (error) {
