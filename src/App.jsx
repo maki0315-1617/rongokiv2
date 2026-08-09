@@ -1,339 +1,337 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ロン君のゴキ退治 v2</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #112211;
-            color: #ffffff;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            overflow: hidden;
-        }
-        .container {
-            width: 100%;
-            max-width: 480px;
-            background: #1a2e1a;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-            padding: 20px;
-            box-sizing: border-box;
-            text-align: center;
-        }
-        .profile-img {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #4CAF50;
-            margin-bottom: 10px;
-        }
-        h1 { font-size: 24px; margin: 10px 0 20px 0; }
-        h3 { margin: 10px 0; }
-        .hidden { display: none !important; }
-        input, select {
-            width: 100%; padding: 12px; margin: 8px 0 16px 0;
-            border: 1px solid #444; border-radius: 6px;
-            background: #2a3e2a; color: white; box-sizing: border-box; font-size: 16px;
-        }
-        button {
-            width: 100%; padding: 12px; background-color: #4CAF50;
-            color: white; border: none; border-radius: 6px;
-            font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px;
-            transition: background 0.2s;
-        }
-        button:hover { background-color: #45a049; }
-        button.danger { background-color: #d32f2f; }
-        button.danger:hover { background-color: #b71c1c; }
-        .link-text {
-            color: #81C784; cursor: pointer; margin-top: 15px;
-            display: inline-block; font-size: 14px; text-decoration: underline;
-        }
-        /* スコアとタイムの重なりを解消するためのフレキシブルヘッダー */
-        .game-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #112211;
-            padding: 10px 15px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            font-weight: bold;
-            font-size: 15px;
-        }
-        .game-header div {
-            flex: 1;
-            text-align: center;
-        }
-        .game-header div:first-child { text-align: left; }
-        .game-header div:last-child { text-align: right; }
+import React, { useState, useEffect, useRef } from 'react';
 
-        .game-area {
-            position: relative;
-            width: 100%;
-            height: 360px;
-            background: #0d1a0d;
-            border: 2px solid #335533;
-            border-radius: 8px;
-            overflow: hidden;
-            touch-action: manipulation;
-        }
-        .roach {
-            position: absolute;
-            width: 50px; height: 50px; cursor: pointer;
-            background-image: url('https://em-content.zobj.net/source/fluent/170/cockroach_1fab3.png');
-            background-size: contain; background-repeat: no-repeat; background-position: center;
-            transform: translate(-50%, -50%); user-select: none;
-            transition: transform 0.1s;
-        }
-        .roach:active { transform: translate(-50%, -50%) scale(1.2); }
-    </style>
-</head>
-<body>
+// シーン1〜10の設定データ
+const sceneConfigs = {
+  1: { time: 60, target: 10, speed: 1.0, interval: 1800 },
+  2: { time: 55, target: 12, speed: 1.2, interval: 1600 },
+  3: { time: 50, target: 15, speed: 1.4, interval: 1400 },
+  4: { time: 45, target: 18, speed: 1.6, interval: 1200 },
+  5: { time: 40, target: 20, speed: 1.8, interval: 1000 },
+  6: { time: 35, target: 22, speed: 2.0, interval: 900 },
+  7: { time: 30, target: 25, speed: 2.2, interval: 800 },
+  8: { time: 28, target: 28, speed: 2.4, interval: 750 },
+  9: { time: 25, target: 30, speed: 2.6, interval: 700 },
+  10: { time: 20, target: 35, speed: 3.0, interval: 600 }
+};
 
-<div class="container">
-    <!-- ログイン画面 -->
-    <div id="login-screen">
-        <img src="https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=150&auto=format&fit=crop&q=80" alt="ロンくん" class="profile-img">
-        <h1>ロン君のゴキ退治 v2</h1>
-        <h3>ログイン</h3>
-        <input type="text" id="username-input" placeholder="ユーザー名 (半角英数字)">
-        <input type="password" id="password-input" placeholder="パスワード">
-        <button onclick="handleLogin()">ログインして開始</button>
-        <span class="link-text" onclick="showMenuScreen()">新規アカウントを作成する / ゲスト</span>
-    </div>
+export default function App() {
+  const [screen, setScreen] = useState('login'); // login, menu, game
+  const [username, setUsername] = useState('');
+  const [currentScene, setCurrentScene] = useState(1);
+  const [maxUnlockedScene, setMaxUnlockedScene] = useState(1);
+  const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [targetCount, setTargetCount] = useState(10);
+  
+  const [roaches, setRoaches] = useState([]);
+  const gameAreaRef = useRef(null);
 
-    <!-- メニュー・シーン選択画面 -->
-    <div id="menu-screen" class="hidden">
-        <img src="https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=150&auto=format&fit=crop&q=80" alt="ロンくん" class="profile-img">
-        <h1>シーン選択</h1>
-        <p>プレイヤー: <span id="display-username">ゲスト</span></p>
-        <label for="scene-select">挑戦するシーンを選んでください（1〜10）</label>
-        <select id="scene-select">
-            <!-- シーン1〜10 -->
-        </select>
-        <button onclick="startGame()">ゲームスタート</button>
-        <button class="danger" onclick="logout()">ログアウト</button>
-    </div>
-
-    <!-- ゲームプレイ画面 -->
-    <div id="game-screen" class="hidden">
-        <div class="game-header">
-            <div id="stage-label">Stage 1</div>
-            <div id="score-label">退治数: 0 / 10</div>
-            <div id="time-label">残り: 60秒</div>
-        </div>
-        <div class="game-area" id="game-area"></div>
-        <button class="danger" onclick="returnToMenu()" style="margin-top: 15px;">メニューに戻る</button>
-    </div>
-</div>
-
-<script>
-    // シーン1〜10の設定データ（ステージが進むほど難しくなります）
-    const sceneConfigs = {
-        1: { time: 60, target: 10, speed: 1.0, interval: 1800 },
-        2: { time: 55, target: 12, speed: 1.2, interval: 1600 },
-        3: { time: 50, target: 15, speed: 1.4, interval: 1400 },
-        4: { time: 45, target: 18, speed: 1.6, interval: 1200 },
-        5: { time: 40, target: 20, speed: 1.8, interval: 1000 },
-        6: { time: 35, target: 22, speed: 2.0, interval: 900 },
-        7: { time: 30, target: 25, speed: 2.2, interval: 800 },
-        8: { time: 28, target: 28, speed: 2.4, interval: 750 },
-        9: { time: 25, target: 30, speed: 2.6, interval: 700 },
-        10: { time: 20, target: 35, speed: 3.0, interval: 600 }
-    };
-
-    let currentScene = 1;
-    let maxUnlockedScene = 1;
-    let score = 0;
-    let timeLeft = 60;
-    let targetCount = 10;
-    let gameTimer = null;
-    let spawnTimer = null;
-    let activeRoaches = [];
-
-    // 画面切り替え用ヘルパー
-    function switchScreen(screenId) {
-        ['login-screen', 'menu-screen', 'game-screen'].forEach(id => {
-            document.getElementById(id).classList.add('hidden');
-        });
-        document.getElementById(screenId).classList.remove('hidden');
+  // ローカルストレージから進行状況の読み込み
+  useEffect(() => {
+    const saved = localStorage.getItem('ron_max_scene');
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      setMaxUnlockedScene(parsed);
+      setCurrentScene(parsed);
     }
+  }, []);
 
-    function handleLogin() {
-        const username = document.getElementById('username-input').value.trim();
-        if (username) {
-            document.getElementById('display-username').textContent = username;
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (!username.trim()) {
+      alert('ユーザー名を入力してください');
+      return;
+    }
+    setScreen('menu');
+  };
+
+  const startGame = () => {
+    const config = sceneConfigs[currentScene];
+    setScore(0);
+    setTimeLeft(config.time);
+    setTargetCount(config.target);
+    setRoaches([]);
+    setScreen('game');
+  };
+
+  // ゲーム中のタイマーとゴキブリ出現制御
+  useEffect(() => {
+    if (screen !== 'game') return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          alert('時間切れです…！もう一度挑戦してください。');
+          setScreen('menu');
+          return 0;
         }
-        showMenuScreen();
-    }
+        return prev - 1;
+      });
+    }, 1000);
 
-    function showMenuScreen() {
-        // localStorageからクリア状況を復元
-        const savedMax = localStorage.getItem('ron_max_scene');
-        if (savedMax) {
-            maxUnlockedScene = parseInt(savedMax);
-        }
-
-        // シーンセレクトボックスを生成
-        const select = document.getElementById('scene-select');
-        select.innerHTML = '';
-        for (let i = 1; i <= 10; i++) {
-            const config = sceneConfigs[i];
-            const opt = document.createElement('option');
-            opt.value = i;
-            opt.textContent = `シーン ${i} (制限 ${config.time}秒 / 目標 ${config.target}匹)`;
-            if (i > maxUnlockedScene) {
-                opt.disabled = true;
-                opt.textContent += " 【未解放】";
-            }
-            select.appendChild(opt);
-        }
-        select.value = maxUnlockedScene;
-        switchScreen('menu-screen');
-    }
-
-    function logout() {
-        switchScreen('login-screen');
-    }
-
-    function returnToMenu() {
-        clearInterval(gameTimer);
-        clearInterval(spawnTimer);
-        showMenuScreen();
-    }
-
-    function startGame() {
-        const select = document.getElementById('scene-select');
-        currentScene = parseInt(select.value);
-        const config = sceneConfigs[currentScene];
-
-        score = 0;
-        timeLeft = config.time;
-        targetCount = config.target;
-        activeRoaches = [];
-
-        document.getElementById('stage-label').textContent = `Stage ${currentScene}`;
-        document.getElementById('score-label').textContent = `退治数: ${score} / ${targetCount}`;
-        document.getElementById('time-label').textContent = `残り: ${timeLeft}秒`;
-        document.getElementById('game-area').innerHTML = '';
-
-        switchScreen('game-screen');
-
-        // 制限時間タイマー
-        gameTimer = setInterval(() => {
-            timeLeft--;
-            document.getElementById('time-label').textContent = `残り: ${timeLeft}秒`;
-            if (timeLeft <= 0) {
-                endGame(false);
-            }
-        }, 1000);
-
-        // ゴキブリ発生タイマー
-        spawnRoach(config.speed);
-        spawnTimer = setInterval(() => {
-            spawnRoach(config.speed);
-        }, config.interval);
-    }
-
-    function spawnRoach(speedMultiplier) {
-        const area = document.getElementById('game-area');
-        if (!area || document.getElementById('game-screen').classList.contains('hidden')) return;
-
-        const roach = document.createElement('div');
-        roach.className = 'roach';
-
+    const config = sceneConfigs[currentScene];
+    const spawner = setInterval(() => {
+      if (gameAreaRef.current) {
+        const area = gameAreaRef.current;
         const maxX = area.clientWidth - 50;
         const maxY = area.clientHeight - 50;
-        let posX = Math.random() * maxX;
-        let posY = Math.random() * maxY;
-
-        roach.style.left = `${posX}px`;
-        roach.style.top = `${posY}px`;
-
-        // ランダム移動ベクトル
-        let vx = (Math.random() - 0.5) * 4 * speedMultiplier;
-        let vy = (Math.random() - 0.5) * 4 * speedMultiplier;
-
-        const roachObj = {
-            element: roach,
-            x: posX,
-            y: posY,
-            vx: vx,
-            vy: vy
+        const newRoach = {
+          id: Date.now() + Math.random(),
+          x: Math.random() * maxX,
+          y: Math.random() * maxY,
+          vx: (Math.random() - 0.5) * 4 * config.speed,
+          vy: (Math.random() - 0.5) * 4 * config.speed,
         };
+        setRoaches((prev) => [...prev, newRoach]);
+      }
+    }, config.interval);
 
-        // タップ/クリック時の処理
-        roach.addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-            score++;
-            document.getElementById('score-label').textContent = `退治数: ${score} / ${targetCount}`;
-            roach.remove();
-            activeRoaches = activeRoaches.filter(r => r !== roachObj);
+    return () => {
+      clearInterval(timer);
+      clearInterval(spawner);
+    };
+  }, [screen, currentScene]);
 
-            if (score >= targetCount) {
-                endGame(true);
+  // ゴキブリの自動移動アニメーションループ
+  useEffect(() => {
+    if (screen !== 'game') return;
+
+    let animationId;
+    const updateLoop = () => {
+      if (gameAreaRef.current) {
+        const area = gameAreaRef.current;
+        const maxX = area.clientWidth - 50;
+        const maxY = area.clientHeight - 50;
+
+        setRoaches((prevRoaches) =>
+          prevRoaches.map((r) => {
+            let nextX = r.x + r.vx;
+            let nextY = r.y + r.vy;
+            let nextVx = r.vx;
+            let nextVy = r.vy;
+
+            if (nextX <= 0 || nextX >= maxX) nextVx *= -1;
+            if (nextY <= 0 || nextY >= maxY) nextVy *= -1;
+
+            if (Math.random() < 0.04) {
+              nextVx += (Math.random() - 0.5) * 2;
+              nextVy += (Math.random() - 0.5) * 2;
             }
-        });
 
-        area.appendChild(roach);
-        activeRoaches.push(roachObj);
-    }
+            return { ...r, x: nextX, y: nextY, vx: nextVx, vy: nextVy };
+          })
+        );
+      }
+      animationId = requestAnimationFrame(updateLoop);
+    };
 
-    // ゴキブリ自動移動フレーム処理
-    function updateGameLoop() {
-        if (!document.getElementById('game-screen').classList.contains('hidden')) {
-            const area = document.getElementById('game-area');
-            const maxX = area.clientWidth - 50;
-            const maxY = area.clientHeight - 50;
+    animationId = requestAnimationFrame(updateLoop);
+    return () => cancelAnimationFrame(animationId);
+  }, [screen]);
 
-            activeRoaches.forEach(r => {
-                r.x += r.vx;
-                r.y += r.vy;
-
-                // 壁で跳ね返る
-                if (r.x <= 0 || r.x >= maxX) r.vx *= -1;
-                if (r.y <= 0 || r.y >= maxY) r.vy *= -1;
-
-                // ランダムに方向転換
-                if (Math.random() < 0.04) {
-                    r.vx += (Math.random() - 0.5) * 2;
-                    r.vy += (Math.random() - 0.5) * 2;
-                }
-
-                r.element.style.left = `${r.x}px`;
-                r.element.style.top = `${r.y}px`;
-            });
+  // ゴキブリタップ時の処理
+  const handleRoachClick = (id) => {
+    setScore((prev) => {
+      const nextScore = prev + 1;
+      if (nextScore >= targetCount) {
+        alert(`おめでとうございます！シーン ${currentScene} クリア！`);
+        if (currentScene >= maxUnlockedScene && currentScene < 10) {
+          const nextMax = currentScene + 1;
+          setMaxUnlockedScene(nextMax);
+          localStorage.setItem('ron_max_scene', nextMax);
+          setCurrentScene(nextMax);
         }
-        requestAnimationFrame(updateGameLoop);
-    }
-    requestAnimationFrame(updateGameLoop);
+        setScreen('menu');
+      }
+      return nextScore;
+    });
 
-    function endGame(isClear) {
-        clearInterval(gameTimer);
-        clearInterval(spawnTimer);
-        document.getElementById('game-area').innerHTML = '';
+    setRoaches((prev) => prev.filter((r) => r.id !== id));
+  };
 
-        if (isClear) {
-            alert(`おめでとうございます！シーン ${currentScene} クリア！`);
-            // 次のシーンを解放
-            if (currentScene >= maxUnlockedScene && currentScene < 10) {
-                maxUnlockedScene = currentScene + 1;
-                localStorage.setItem('ron_max_scene', maxUnlockedScene);
-            }
-        } else {
-            alert("時間切れです…！もう一度挑戦してください。");
-        }
-        showMenuScreen();
-    }
-</script>
+  return (
+    <div style={styles.body}>
+      <div style={styles.container}>
+        
+        {/* ログイン画面 */}
+        {screen === 'login' && (
+          <div>
+            <img 
+              src="https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=150&auto=format&fit=crop&q=80" 
+              alt="ロンくん" 
+              style={styles.profileImg} 
+            />
+            <h1 style={styles.h1}>ロン君のゴキ退治 v2</h1>
+            <h3 style={styles.h3}>ログイン</h3>
+            <form onSubmit={handleLogin}>
+              <input 
+                type="text" 
+                placeholder="ユーザー名 (半角英数字)" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                style={styles.input}
+              />
+              <input 
+                type="password" 
+                placeholder="パスワード" 
+                style={styles.input}
+              />
+              <button type="submit" style={styles.button}>ログインして開始</button>
+            </form>
+          </div>
+        )}
 
-</body>
-</html>
+        {/* メニュー・シーン選択画面 */}
+        {screen === 'menu' && (
+          <div>
+            <img 
+              src="https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=150&auto=format&fit=crop&q=80" 
+              alt="ロンくん" 
+              style={styles.profileImg} 
+            />
+            <h1 style={styles.h1}>シーン選択</h1>
+            <p style={{ margin: '0 0 10px 0' }}>プレイヤー: {username}</p>
+            <label style={styles.label}>挑戦するシーンを選んでください（1〜10）</label>
+            <select 
+              value={currentScene} 
+              onChange={(e) => setCurrentScene(Number(e.target.value))}
+              style={styles.select}
+            >
+              {[...Array(10)].map((_, i) => {
+                const sceneNum = i + 1;
+                const config = sceneConfigs[sceneNum];
+                const isLocked = sceneNum > maxUnlockedScene;
+                return (
+                  <option key={sceneNum} value={sceneNum} disabled={isLocked}>
+                    シーン {sceneNum} (制限 {config.time}秒 / 目標 {config.target}匹) {isLocked ? '【未解放】' : ''}
+                  </option>
+                );
+              })}
+            </select>
+            <button onClick={startGame} style={styles.button}>ゲームスタート</button>
+            <button onClick={() => setScreen('login')} style={{...styles.button, backgroundColor: '#d32f2f'}}>ログアウト</button>
+          </div>
+        )}
+
+        {/* ゲーム画面 */}
+        {screen === 'game' && (
+          <div>
+            {/* スコアとタイムが重ならないように左右に配置したヘッダー */}
+            <div style={styles.gameHeader}>
+              <div>Stage {currentScene}</div>
+              <div>退治数: {score} / {targetCount}</div>
+              <div>残り: {timeLeft}秒</div>
+            </div>
+
+            <div ref={gameAreaRef} style={styles.gameArea}>
+              {roaches.map((r) => (
+                <div
+                  key={r.id}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    handleRoachClick(r.id);
+                  }}
+                  style={{
+                    ...styles.roach,
+                    left: `${r.x}px`,
+                    top: `${r.y}px`,
+                  }}
+                />
+              ))}
+            </div>
+
+            <button onClick={() => setScreen('menu')} style={{...styles.button, backgroundColor: '#d32f2f', marginTop: '15px'}}>
+              メニューに戻る
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+// デザインスタイル
+const styles = {
+  body: {
+    backgroundColor: '#112211',
+    color: '#ffffff',
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100vh',
+    margin: 0,
+    boxSizing: 'border-box'
+  },
+  container: {
+    width: '100%',
+    maxWidth: '480px',
+    background: '#1a2e1a',
+    borderRadius: '12px',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+    padding: '20px',
+    boxSizing: 'border-box',
+    textAlign: 'center'
+  },
+  profileImg: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '3px solid #4CAF50',
+    marginBottom: '10px'
+  },
+  h1: { fontSize: '24px', margin: '10px 0 20px 0' },
+  h3: { margin: '10px 0' },
+  label: { display: 'block', marginBottom: '8px', textAlign: 'left', fontSize: '14px' },
+  input: {
+    width: '100%', padding: '12px', margin: '8px 0 16px 0',
+    border: '1px solid #444', borderRadius: '6px',
+    background: '#2a3e2a', color: 'white', boxSizing: 'border-box', fontSize: '16px'
+  },
+  select: {
+    width: '100%', padding: '12px', margin: '8px 0 16px 0',
+    border: '1px solid #444', borderRadius: '6px',
+    background: '#2a3e2a', color: 'white', boxSizing: 'border-box', fontSize: '16px'
+  },
+  button: {
+    width: '100%', padding: '12px', backgroundColor: '#4CAF50',
+    color: 'white', border: 'none', borderRadius: '6px',
+    fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px'
+  },
+  gameHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    background: '#112211',
+    padding: '10px 15px',
+    borderRadius: '6px',
+    marginBottom: '15px',
+    fontWeight: 'bold',
+    fontSize: '15px'
+  },
+  gameArea: {
+    position: 'relative',
+    width: '100%',
+    height: '360px',
+    background: '#0d1a0d',
+    border: '2px solid #335533',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    touchAction: 'manipulation'
+  },
+  roach: {
+    position: 'absolute',
+    width: '50px',
+    height: '50px',
+    cursor: 'pointer',
+    backgroundImage: "url('https://em-content.zobj.net/source/fluent/170/cockroach_1fab3.png')",
+    backgroundSize: 'contain',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'center',
+    transform: 'translate(-50%, -50%)',
+    userSelect: 'none'
+  }
+};
