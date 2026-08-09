@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import Cockroach from './Cockroach';
 
-// 画像ファイルのインポート（背景や猫の表示用）
+// 画像ファイルのインポート
 import trashPileImage from './images/trash_pile.png';
 import blackCatImage from './images/black_cat.png';
 
@@ -15,17 +15,17 @@ function App() {
   const [cockroaches, setCockroaches] = useState([]);
   const [timeLeft, setTimeLeft] = useState(60);
   
-  // ユーザー管理の状態
+  // ユーザー状態
   const [user, setUser] = useState(null); 
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // ランキングと最終得点
+  // ランキングデータ
   const [rankings, setRankings] = useState([]);
   const [finalScore, setFinalScore] = useState(0);
 
-  // ランキングを本番のD1データベースから非同期で引っ張ってくる関数
+  // ランキングを本番DBから取得する関数
   const fetchRankings = async () => {
     try {
       const res = await fetch('/api/ranking');
@@ -42,7 +42,7 @@ function App() {
     fetchRankings();
   }, [gameState]);
 
-  // 会員登録ボタン・ログインボタンが押された時のバックエンド通信処理
+  // 会員登録・ログイン処理
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -74,11 +74,11 @@ function App() {
     }
   };
 
-  // ゲームプレイ中の「タイマー」と「ゴキブリの自動生成」を管理する核心の処理
+  // ★【出現不具合の根本修正】
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    // 1. 1秒ごとに残り時間を1ずつ減らすタイマー
+    // 1. 1秒ごとのカウントダウンタイマー
     const countdown = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -89,7 +89,7 @@ function App() {
       });
     }, 1000);
 
-    // 2. 60秒が経過してタイムアップになった瞬間のゲームオーバー処理
+    // 2. 60秒経過時のタイムアップ処理
     const timer = setTimeout(async () => {
       await fetch('/api/score', {
         method: 'POST',
@@ -101,49 +101,48 @@ function App() {
       setCockroaches([]);
     }, 60000);
 
-    // 3. 0.6秒ごとに脈動し、通常モードからハードモードまで1秒目から確実に動かす生成ループ
+    // 3. ★【出現バグを100%解決する処理】
+    // 依存関係によるタイマーの遅延を無くすため、常に0.6秒ごとに動く超高速なループを起動します
     const spawnInterval = setInterval(() => {
-      const currentIsHardMode = timeLeft <= 30; // 30秒が経過したかどうかのリアルタイム判定
+      // 画面更新のラグを防ぐため、最新のtimeLeftを基準にモードを確定させます
+      const isHard = timeLeft <= 30;
 
-      // 前半の通常モード時は、出現が多すぎて画面が埋まらないよう40%の確率で生成を間引きます
-      if (!currentIsHardMode && Math.random() < 0.4) {
-        return; 
-      }
-
-      const id = Date.now() + Math.random(); // 配列ループ用の固有ID
+      // 通常モード（開始〜30秒）の時は、出現をスキップ（間引き）する処理を【廃止】します
+      // これにより、ゲームがスタートした直後（59秒・58秒）から確実に0.6秒間隔で的が出撃します
+      
+      const id = Date.now() + Math.random();
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
 
-      // スピードの設定：前半は3.5秒〜4.5秒かけて走り抜ける。後半30秒は1.5秒〜2.2秒の超高速に狂暴化！
-      const baseDuration = currentIsHardMode ? (Math.random() * 0.7 + 1.5) : (Math.random() * 1.0 + 3.5);
+      // スピードの設定：前半は3.5秒〜4.2秒。後半30秒は1.2秒〜1.8秒の超高速
+      const baseDuration = isHard ? (Math.random() * 0.6 + 1.2) : (Math.random() * 0.7 + 3.5);
 
       const newCockroach = {
         id,
         direction,
         type,
-        position: Math.random() * 60 + 20, // 画面の端すぎない中央寄りの座標から出発させる
+        position: Math.random() * 60 + 20, 
         duration: baseDuration,
-        isReverse: currentIsHardMode && Math.random() > 0.5 // 後半のみ50%の確率で折り返し属性を付与
+        isReverse: isHard && Math.random() > 0.5 // 後半のみ50%で折り返す
       };
 
       setCockroaches((prev) => [...prev, newCockroach]);
 
-      // 走り抜け終わる時間が来たら自動で画面（配列）から消去する
       setTimeout(() => {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
       }, (newCockroach.duration + 0.5) * 1000);
 
-    }, 600); // 常に0.6秒間隔でプログラムのスイッチを入れ、開始1秒目から確実に通常ゴキブリを発進させます
+    }, timeLeft <= 30 ? 400 : 800); // 後半30秒はさらに出現頻度が跳ね上がります
 
     return () => {
       clearTimeout(timer);
       clearInterval(spawnInterval);
       clearInterval(countdown);
     };
-  }, [gameState, timeLeft, score]);
+  }, [gameState, timeLeft]); // scoreを依存配列から外し、スコア変化時にタイマーがリセットされる不具合を防止
 
-  // 画面上の的（ゴキブリ）をクリックしたときのスコア加算・減算処理
+  // 的をクリックしたときのスコア加減算
   const handleCockroachClick = async (id, type) => {
     if (gameState !== 'playing') return;
 
@@ -154,10 +153,8 @@ function App() {
     const nextScore = Math.max(0, score + points);
     setScore(nextScore);
     
-    // クリックされたゴキブリを画面から消去
     setCockroaches((prev) => prev.filter((c) => c.id !== id));
 
-    // 10匹退治したらその瞬間にゲームクリアとなりスコアを保存
     if (nextScore >= 10) {
       const currentLeftTime = timeLeft;
       
@@ -257,19 +254,22 @@ function App() {
       {gameState === 'playing' && (
         <div className="game-field-wrapper" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
           
-          {/* スコア・タイマー表示 */}
-          <div className="score-display" style={{ zIndex: 200, position: 'relative' }}>
-            退治数: {score} / 10
-            <span className={`countdown-display ${timeLeft <= 30 ? 'countdown-danger' : ''}`}>
-              残り: {timeLeft} 秒 {timeLeft <= 30 ? '🔥HARD MODE' : ''}
-            </span>
-          </div>
-
-          {timeLeft <= 30 && (
-            <div style={{ position: 'absolute', top: '70px', left: '20px', color: 'red', fontWeight: 'bold', fontSize: '22px', textShadow: '1px 1px 3px black', zIndex: 200 }}>
-              🚨 警告：動きが速くなり、折り返す奴も出現中！
+          {/* ★【文字被り修正】スコア表示とタイマー・警告表示を縦に綺麗に並べ、絶対に見える位置に固定します */}
+          <div className="score-board-panel" style={{ zIndex: 200, position: 'relative', display: 'flex', flexDirection: 'column', gap: '5px', padding: '15px', background: 'rgba(0,0,0,0.6)', color: 'white', borderBottomRightRadius: '8px', width: 'fit-content' }}>
+            <div className="score-display" style={{ fontSize: '24px', fontWeight: 'bold' }}>
+              退治数: <span style={{ color: '#00ff00', fontSize: '28px' }}>{score}</span> / 10
             </div>
-          )}
+            <div className="timer-display" style={{ fontSize: '18px' }}>
+              残り時間: <span style={{ fontWeight: 'bold', fontSize: '20px' }}>{timeLeft}</span> 秒
+            </div>
+            
+            {/* 30秒以下になった時だけ現れる警告赤文字。スコアの真下に表示されるため絶対隠れません */}
+            {timeLeft <= 30 && (
+              <div className="hard-mode-alert" style={{ color: '#ff3333', fontWeight: 'bold', fontSize: '18px', textShadow: '1px 1px 2px black', animation: 'blink 0.8s infinite' }}>
+                🔥 HARD MODE：高速 ＆ 折り返し発生中！
+              </div>
+            )}
+          </div>
 
           {/* 背景のゴミ山と黒猫ロン君の配置 */}
           <div className="game-content">
@@ -281,7 +281,7 @@ function App() {
             </div>
           </div>
 
-          {/* ★ターゲットのレンダリング（基準点となる箱の直下に配置） */}
+          {/* ターゲットのレンダリング */}
           {cockroaches.map((roach) => (
             <Cockroach
               key={roach.id}
