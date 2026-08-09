@@ -140,7 +140,7 @@ export default function App() {
   };
 
   const submitScore = async (finalScore, finalTimeLeft) => {
-    if (!userId) return;
+    if (!userId) return false;
     try {
       const res = await fetch('/api/score', {
         method: 'POST',
@@ -148,16 +148,21 @@ export default function App() {
         body: JSON.stringify({ userId, score: finalScore, timeLeft: finalTimeLeft }),
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        fetch('/api/ranking')
-          .then((res) => res.json())
-          .then((data) => {
-            if (Array.isArray(data)) setRankings(data);
-          })
-          .catch(() => {});
+      if (!res.ok || !data.success) {
+        console.error('スコア送信に失敗しました', data);
+        return false;
       }
+      try {
+        const rankingRes = await fetch('/api/ranking');
+        const rankingData = await rankingRes.json();
+        if (Array.isArray(rankingData)) setRankings(rankingData);
+      } catch (err) {
+        console.error('ランキング取得エラー', err);
+      }
+      return true;
     } catch (err) {
       console.error('スコア送信エラー', err);
+      return false;
     }
   };
 
@@ -263,14 +268,16 @@ export default function App() {
     setScore((prev) => {
       const nextScore = prev + 1;
       if (nextScore >= targetCount) {
-        setTimeout(() => {
+        setTimeout(async () => {
           alert(`おめでとうございます！シーン ${currentScene} クリア！`);
           if (currentScene >= maxUnlockedScene && currentScene < 10) {
             const nextMax = currentScene + 1;
             setMaxUnlockedScene(nextMax);
             localStorage.setItem('ron_max_scene', nextMax);
             setCurrentScene(nextMax);
-          }          submitScore(nextScore, timeLeft);          setScreen('menu');
+          }
+          await submitScore(nextScore, timeLeft);
+          setScreen('menu');
         }, 50);
       }
       return nextScore;
