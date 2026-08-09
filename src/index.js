@@ -92,6 +92,26 @@ export default {
           return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
         }
       }
+
+      // 管理用: データクリア（データのみ削除）
+      // 必ずヘッダー `x-admin-token` に env.ADMIN_TOKEN の値を付与して実行してください。
+      if (url.pathname === "/api/clear-data" && method === "POST") {
+        try {
+          const token = request.headers.get('x-admin-token') || '';
+          if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+          }
+
+          await env.DB.transaction(async (tx) => {
+            await tx.prepare('DELETE FROM rankings').run();
+            await tx.prepare('DELETE FROM users').run();
+          });
+
+          return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        } catch (error) {
+          return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+        }
+      }
   
       // 通常のファイル配信（Reactの画面）
       return env.ASSETS.fetch(request);

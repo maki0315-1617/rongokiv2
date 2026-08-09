@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import './App.css';
 
 // シーン1〜10の設定データ
 const sceneConfigs = {
@@ -17,11 +18,16 @@ const sceneConfigs = {
 export default function App() {
   const [screen, setScreen] = useState('login'); // login, menu, game
   const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState(null);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
   const [currentScene, setCurrentScene] = useState(1);
   const [maxUnlockedScene, setMaxUnlockedScene] = useState(1);
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60);
   const [targetCount, setTargetCount] = useState(10);
+  const [rankings, setRankings] = useState([]);
   
   const [roaches, setRoaches] = useState([]);
   const gameAreaRef = useRef(null);
@@ -41,11 +47,96 @@ export default function App() {
 
   const handleLogin = (e) => {
     e.preventDefault();
+    setAuthError('');
     if (!username.trim()) {
-      alert('ユーザー名を入力してください');
+      setAuthError('ユーザー名を入力してください');
       return;
     }
-    setScreen('menu');
+    if (!password) {
+      setAuthError('パスワードを入力してください');
+      return;
+    }
+
+    // ログイン API 呼び出し
+    fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          setAuthError(data.error || 'ログインに失敗しました');
+          return;
+        }
+        setUserId(data.userId || null);
+        setUsername(data.username || username);
+        setScreen('menu');
+      })
+      .catch(() => setAuthError('通信エラーが発生しました'));
+  };
+
+  const handleRegister = (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!username.trim()) {
+      setAuthError('ユーザー名を入力してください');
+      return;
+    }
+    if (!password) {
+      setAuthError('パスワードを入力してください');
+      return;
+    }
+
+    fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          setAuthError(data.error || '登録に失敗しました');
+          return;
+        }
+        alert('登録に成功しました。ログインしてください。');
+        setAuthMode('login');
+      })
+      .catch(() => setAuthError('通信エラーが発生しました'));
+  };
+
+  // メニュー画面でランキングを取得して表示
+  useEffect(() => {
+    if (screen !== 'menu') return;
+    let mounted = true;
+    fetch('/api/ranking')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!mounted) return;
+        if (Array.isArray(data)) setRankings(data);
+        else setRankings([]);
+      })
+      .catch(() => setRankings([]));
+    return () => { mounted = false; };
+  }, [screen]);
+
+  const handleClearData = async () => {
+    if (!confirm('データを完全に削除します。よろしいですか？（不可逆）')) return;
+    const token = prompt('管理トークンを入力してください');
+    if (!token) return alert('トークンが必須です');
+
+    try {
+      const res = await fetch('/api/clear-data', {
+        method: 'POST',
+        headers: { 'x-admin-token': token },
+      });
+      const data = await res.json();
+      if (!res.ok) return alert('削除に失敗しました: ' + (data.error || res.status));
+      alert('データを削除しました');
+      setRankings([]);
+    } catch (err) {
+      alert('通信エラーが発生しました');
+    }
   };
 
   const startGame = () => {
@@ -173,13 +264,13 @@ export default function App() {
         {screen === 'login' && (
           <div>
             <img 
-              src="https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=150&auto=format&fit=crop&q=80" 
+              src="/images/black_cat.png" 
               alt="ロンくん" 
               style={styles.profileImg} 
             />
             <h1 style={styles.h1}>ロン君のゴキ退治 v2</h1>
-            <h3 style={styles.h3}>ログイン</h3>
-            <form onSubmit={handleLogin}>
+            <h3 style={styles.h3}>{authMode === 'login' ? 'ログイン' : '新規ユーザー登録'}</h3>
+            <form onSubmit={authMode === 'login' ? handleLogin : handleRegister}>
               <input 
                 type="text" 
                 placeholder="ユーザー名 (半角英数字)" 
@@ -190,10 +281,16 @@ export default function App() {
               <input 
                 type="password" 
                 placeholder="パスワード" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 style={styles.input}
               />
-              <button type="submit" style={styles.button}>ログインして開始</button>
+              {authError && <p style={{ color: 'orange', margin: '6px 0' }}>{authError}</p>}
+              <button type="submit" style={styles.button}>{authMode === 'login' ? 'ログインして開始' : '登録して開始'}</button>
             </form>
+            <p style={{ marginTop: '12px', cursor: 'pointer', color: '#ddd' }} onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}>
+              {authMode === 'login' ? '新規アカウントを作成する' : '既存のアカウントでログインする'}
+            </p>
           </div>
         )}
 
@@ -201,7 +298,7 @@ export default function App() {
         {screen === 'menu' && (
           <div>
             <img 
-              src="https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=150&auto=format&fit=crop&q=80" 
+              src="/images/black_cat.png" 
               alt="ロンくん" 
               style={styles.profileImg} 
             />
@@ -226,6 +323,25 @@ export default function App() {
             </select>
             <button onClick={startGame} style={styles.button}>ゲームスタート</button>
             <button onClick={() => setScreen('login')} style={{...styles.button, backgroundColor: '#d32f2f'}}>ログアウト</button>
+            <div className="history-section">
+              <h3>ランキング（Top 10）</h3>
+              {rankings.length === 0 ? (
+                <p style={{ margin: 0 }}>読み込み中またはデータがありません</p>
+              ) : (
+                <ul>
+                  {rankings.map((r, i) => (
+                    <li key={i}>
+                      <strong>{i + 1}. {r.username}</strong> - {r.total_point}pt ({r.score} / {r.time_left})
+                      <br />
+                      <small style={{ color: '#ccc' }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div style={{ marginTop: '12px' }}>
+              <button onClick={handleClearData} style={{...styles.button, backgroundColor:'#b71c1c'}}>管理: データを全削除</button>
+            </div>
           </div>
         )}
 
