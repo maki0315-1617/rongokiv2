@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import Cockroach from './Cockroach';
+
+// ★画像ファイルをViteの標準ルールで確実にインポートします
 import trashPileImage from './images/trash_pile.png';
 import blackCatImage from './images/black_cat.png';
 
@@ -20,7 +22,7 @@ function App() {
   const [rankings, setRankings] = useState([]);
   const [finalScore, setFinalScore] = useState(0);
 
-  // D1データベースからリアルタイムランキングを取得する関数
+  // ランキングを確実に相対パスで取得
   const fetchRankings = async () => {
     try {
       const res = await fetch('/api/ranking');
@@ -37,7 +39,6 @@ function App() {
     fetchRankings();
   }, [gameState]);
 
-  // ユーザー登録 ＆ ログイン処理の関数
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -69,11 +70,9 @@ function App() {
     }
   };
 
-  // ゲームプレイ中のタイマー・ゴキブリ出現処理
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    // 残り秒数のカウントダウン
     const countdown = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -84,7 +83,6 @@ function App() {
       });
     }, 1000);
 
-    // 60秒が経過したときのゲームオーバー処理
     const timer = setTimeout(async () => {
       await fetch('/api/score', {
         method: 'POST',
@@ -96,33 +94,33 @@ function App() {
       setCockroaches([]);
     }, 60000);
 
-    // ゴキブリの自動生成ロジック
+    // ★ゴキブリの出現ロジック（確実に生成させてステートを更新）
     const spawnInterval = setInterval(() => {
-      const id = Date.now();
+      const id = Date.now() + Math.random();
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
 
-      // 30秒経過（残り30秒以下）で難しくなる判定
       const isHardMode = timeLeft <= 30;
-      const baseDuration = isHardMode ? (Math.random() * 3.0 + 3.0) : (Math.random() * 6.0 + 10.0);
+      const baseDuration = isHardMode ? (Math.random() * 2.0 + 2.0) : (Math.random() * 4.0 + 6.0);
 
       const newCockroach = {
         id,
         direction,
         type,
-        position: Math.random() * 80 + 10,
+        position: Math.random() * 70 + 15, // 画面外にはみ出さないよう調整
         duration: baseDuration,
-        isReverse: isHardMode && Math.random() > 0.5 // ハードモードは50%で折り返す
+        isReverse: isHardMode && Math.random() > 0.5
       };
 
       setCockroaches((prev) => [...prev, newCockroach]);
 
+      // 時間が経ったら自動消滅
       setTimeout(() => {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
-      }, (newCockroach.duration + 2.0) * 1000);
+      }, (newCockroach.duration + 1.0) * 1000);
 
-    }, timeLeft <= 30 ? 1000 : 2000); // 30秒後は2倍出現する
+    }, timeLeft <= 30 ? 800 : 1500); // 難易度アップ時は出現速度も高速化
 
     return () => {
       clearTimeout(timer);
@@ -131,7 +129,6 @@ function App() {
     };
   }, [gameState, timeLeft, score]);
 
-  // ゴキブリをクリック（叩いた）ときの処理
   const handleCockroachClick = async (id, type) => {
     if (gameState !== 'playing') return;
 
@@ -143,11 +140,9 @@ function App() {
     setScore(nextScore);
     setCockroaches((prev) => prev.filter((c) => c.id !== id));
 
-    // 10匹退治したら即座にクリア
     if (nextScore >= 10) {
       const currentLeftTime = timeLeft;
       
-      // スコアデータを送信
       const res = await fetch('/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,7 +165,7 @@ function App() {
   return (
     <div className={`game-container ${gameState === 'playing' ? 'game-floor' : ''}`}>
 
-      {/* 🔐 ログイン / ユーザー登録 画面 */}
+      {/* 🔐 認証画面 */}
       {gameState === 'auth' && (
         <div className="start-screen">
           <div className="cat-header">
@@ -208,7 +203,7 @@ function App() {
         </div>
       )}
 
-      {/* 🏠 タイトル・待機画面（ランキング表示） */}
+      {/* 🏠 タイトル画面 */}
       {gameState === 'start' && (
         <div className="start-screen">
           <div className="cat-header">
@@ -265,6 +260,7 @@ function App() {
             </div>
           </div>
 
+          {/* ★生成されたゴキブリ配列をループして確実にコンポーネントを描画 */}
           {cockroaches.map((roach) => (
             <Cockroach
               key={roach.id}
