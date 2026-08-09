@@ -1,15 +1,31 @@
-/* 通常の移動アニメーション */
+/* ==========================================================================
+   src/Cockroach.css (修正・完全版)
+   ========================================================================== */
+
+/* ⭕️ 通常モード用：画面の外から出発し、反対側の画面の外まで100%まっすぐ走り抜ける命令 */
 .roach-top { animation: moveTop linear forwards; }
 .roach-bottom { animation: moveBottom linear forwards; }
 .roach-left { animation: moveLeft linear forwards; }
 .roach-right { animation: moveRight linear forwards; }
 
-@keyframes moveTop { 0% { top: -50px; } 100% { top: 110vh; } }
-@keyframes moveBottom { 0% { bottom: -50px; } 100% { bottom: 110vh; } }
-@keyframes moveLeft { 0% { left: -50px; } 100% { left: 110vw; } }
-@keyframes moveRight { 0% { right: -50px; } 100% { right: 110vw; } }
+@keyframes moveTop { 
+  0% { top: -50px; } 
+  100% { top: 110vh; } 
+}
+@keyframes moveBottom { 
+  0% { bottom: -50px; } 
+  100% { bottom: 110vh; } 
+}
+@keyframes moveLeft { 
+  0% { left: -50px; } 
+  100% { left: 110vw; } 
+}
+@keyframes moveRight { 
+  0% { right: -50px; } 
+  100% { right: 110vw; } 
+}
 
-/* ★改造：30秒経過後に50%の確率で発動する「途中で折り返す」アニメーション */
+/* ⭕️ ハードモード（折り返し）用：画面の半分まで進んで、Uターンして戻っていく命令 */
 .roach-reverse.roach-top { animation: reverseTop linear forwards; }
 .roach-reverse.roach-bottom { animation: reverseBottom linear forwards; }
 .roach-reverse.roach-left { animation: reverseLeft linear forwards; }
@@ -20,7 +36,7 @@
 @keyframes reverseLeft { 0% { left: -50px; } 50% { left: 50vw; } 100% { left: -50px; } }
 @keyframes reverseRight { 0% { right: -50px; } 50% { right: 50vw; } 100% { right: -50px; } }
 
-/* 点滅アニメーション（プレイ画面の警告用） */
+/* プレイ画面のタイムアップ間近（警告用）の点滅 */
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
