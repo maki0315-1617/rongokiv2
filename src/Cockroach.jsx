@@ -1,92 +1,56 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './Cockroach.css';
 
-import cockroachImage from './images/cockroach.png';
-import cockroachBadImage from './images/cockroach_bad.png';
-import cockroachSpecialImage from './images/cockroach_special.png';
-
-function Cockroach({ id, direction, type, position, duration, onClick }) {
-  const [isExploding, setIsExploding] = useState(false);
-  const [clickPos, setClickPos] = useState({ x: 0, y: 0 });
-
-  let wrapperStyle = {};
-  let imageStyle = {};
-  let animationClass = '';
-
-  wrapperStyle.animationDuration = `${duration}s`;
-
-  if (direction === 'top') {
-    wrapperStyle.left = `${position}%`;
-    wrapperStyle.top = '-50px';
-    animationClass = 'moveDown';
-    imageStyle.transform = 'rotate(180deg)';   // ← 追加（下向きにする）
-  } else if (direction === 'bottom') {
-    wrapperStyle.left = `${position}%`;
-    wrapperStyle.bottom = '-50px';
-    animationClass = 'moveUp';
-  } else if (direction === 'left') {
-    wrapperStyle.top = `${position}%`;
-    wrapperStyle.left = '-50px';
-    animationClass = 'moveRight';
-    imageStyle.transform = 'rotate(90deg)';
-  } else if (direction === 'right') {
-    wrapperStyle.top = `${position}%`;
-    wrapperStyle.right = '-50px';
-    animationClass = 'moveLeft';
-    imageStyle.transform = 'rotate(-90deg)';
-  }
-
-  let imageSrc = cockroachImage;
-  let altText = 'Cockroach';
-
+function Cockroach({ id, direction, type, position, duration, className, onClick }) {
+  // タイプごとに色を分ける（画像がなくても判別可能にする）
+  let backgroundColor = '#8B4513'; // 通常：茶色
+  let label = 'ゴキ';
   if (type === 'bad') {
-    imageSrc = cockroachBadImage;
-    altText = 'Bad Cockroach';
-  } else if (type === 'special') {
-    imageSrc = cockroachSpecialImage;
-    altText = 'Special Cockroach';
+    backgroundColor = '#FF0000'; // バッド：赤色
+    label = 'バッド';
+  }
+  if (type === 'special') {
+    backgroundColor = '#FFD700'; // スペシャル：金色
+    label = 'レア';
   }
 
-  const handleClick = (e) => {
-    e.stopPropagation();
-    if (isExploding) return;
-
-    // 画面全体に対するクリック位置（clientX / clientY）をそのまま保存
-    setClickPos({ x: e.clientX, y: e.clientY });
-    setIsExploding(true);
-
-    setTimeout(() => {
-      onClick(id, type);
-    }, 400);
+  // 動きのアニメーションスタイル
+  const style = {
+    animationDuration: `${duration}s`,
+    backgroundColor: backgroundColor,
+    color: '#fff',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '50%',
+    width: '40px',
+    height: '40px',
+    cursor: 'pointer',
+    position: 'absolute',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+    zIndex: 100,
+    userSelect: 'none'
   };
 
-  return (
-    <>
-<div 
-  className={`cockroach-wrapper ${animationClass}`} 
-  style={wrapperStyle}
-  onClick={handleClick}
->
-  <div className="cockroach-wiggle">
-    <img 
-      src={imageSrc} 
-      alt={altText} 
-      className="cockroach-image" 
-      style={imageStyle} 
-    />
-  </div>
-</div>
+  // 出現方向に応じた初期位置の設定
+  if (direction === 'top' || direction === 'bottom') {
+    style.left = `${position}%`;
+    style[direction] = '-50px';
+  } else {
+    style.top = `${position}%`;
+    style[direction] = '-50px';
+  }
 
-      {/* エフェクトをコンテナの外に固定配置し、ズレを完全に排除 */}
-      {isExploding && (
-        <div 
-          className="global-explosion-effect" 
-          style={{ left: `${clickPos.x}px`, top: `${clickPos.y}px` }}
-        >
-          💥
-        </div>
-      )}
-    </>
+  return (
+    <div
+      className={`cockroach-unit roach-${direction} ${type} ${className || ''}`}
+      style={style}
+      onClick={() => onClick(id, type)}
+    >
+      {label}
+    </div>
   );
 }
 
