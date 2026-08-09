@@ -20,7 +20,7 @@ function Cockroach({ id, direction, type, position, duration, className, onClick
 
   // ★【最重要】クリック面積を確実に確保するため、幅と高さをしっかりと固定します
   const style = {
-    animationDuration: `${duration}s`,
+    '--roach-duration': `${duration}s`,
     position: 'absolute',
     cursor: 'pointer',
     zIndex: 100,
@@ -31,6 +31,7 @@ function Cockroach({ id, direction, type, position, duration, className, onClick
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    pointerEvents: 'auto',
   };
 
   // 出現方向に応じた初期位置の設定

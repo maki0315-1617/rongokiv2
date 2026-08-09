@@ -3,10 +3,16 @@
    ========================================================================== */
 
 /* ⭕️ 通常モード用：画面の外から出発し、反対側の画面の外まで100%まっすぐ走り抜ける命令 */
-.roach-top { animation: moveTop linear forwards; }
-.roach-bottom { animation: moveBottom linear forwards; }
-.roach-left { animation: moveLeft linear forwards; }
-.roach-right { animation: moveRight linear forwards; }
+.cockroach-unit {
+  animation-duration: var(--roach-duration, 3s);
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.roach-top { animation-name: moveTop; }
+.roach-bottom { animation-name: moveBottom; }
+.roach-left { animation-name: moveLeft; }
+.roach-right { animation-name: moveRight; }
 
 @keyframes moveTop { 
   0% { top: -50px; } 
@@ -26,10 +32,10 @@
 }
 
 /* ⭕️ ハードモード（折り返し）用：画面の半分まで進んで、Uターンして戻っていく命令 */
-.roach-reverse.roach-top { animation: reverseTop linear forwards; }
-.roach-reverse.roach-bottom { animation: reverseBottom linear forwards; }
-.roach-reverse.roach-left { animation: reverseLeft linear forwards; }
-.roach-reverse.roach-right { animation: reverseRight linear forwards; }
+.roach-reverse.roach-top { animation-name: reverseTop; }
+.roach-reverse.roach-bottom { animation-name: reverseBottom; }
+.roach-reverse.roach-left { animation-name: reverseLeft; }
+.roach-reverse.roach-right { animation-name: reverseRight; }
 
 @keyframes reverseTop { 0% { top: -50px; } 50% { top: 50vh; } 100% { top: -50px; } }
 @keyframes reverseBottom { 0% { bottom: -50px; } 50% { bottom: 50vh; } 100% { bottom: -50px; } }

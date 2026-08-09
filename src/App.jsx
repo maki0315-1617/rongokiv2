@@ -81,9 +81,11 @@ function App() {
     }
   };
 
-  // ★ゲーム開始1秒目から確実にターゲットを画面に出撃させる不壊ループ
+  // ゲーム中のタイマー・出現・終了処理
   useEffect(() => {
     if (gameState !== 'playing') return;
+
+    const roachTimeouts = [];
 
     // 1. カウントダウンタイマー
     const countdown = setInterval(() => {
@@ -96,58 +98,56 @@ function App() {
       });
     }, 1000);
 
-    // 2. 出現用無限ループ：開始1秒目から100%確実に稼働します
-    const spawnInterval = setInterval(() => {
+    // 2. ゴキブリ出現
+    const spawnCockroach = () => {
       const currentSeconds = stateRef.current.timeLeft;
       const currentGameState = stateRef.current.gameState;
 
-      // ゲームが終了したら即座に処理を止める安全装置
-      if (currentGameState !== 'playing') {
-        clearInterval(spawnInterval);
-        return;
-      }
+      if (currentGameState !== 'playing') return;
 
       const isHard = currentSeconds <= 30;
 
-      // 通常モード（前半30秒）の時は、50%の確率で出現をスキップ（適度な出現頻度へ調整）
       if (!isHard && Math.random() < 0.5) {
-        return; 
+        return;
       }
 
       const id = Date.now() + Math.random();
       const directions = ['top', 'bottom', 'left', 'right'];
       const direction = directions[Math.floor(Math.random() * directions.length)];
       const type = cockroachTypes[Math.floor(Math.random() * cockroachTypes.length)];
-
-      // スピードの設定：前半は3.0秒〜3.8秒。後半30秒は1.2秒〜1.7秒の超高速
       const baseDuration = isHard ? (Math.random() * 0.5 + 1.2) : (Math.random() * 0.8 + 3.0);
 
       const newCockroach = {
         id,
         direction,
         type,
-        position: Math.random() * 60 + 20, 
+        position: Math.random() * 60 + 20,
         duration: baseDuration,
-        isReverse: isHard && Math.random() > 0.5 // 後半のみ50%で折り返す
+        isReverse: isHard && Math.random() > 0.5,
       };
 
       setCockroaches((prev) => [...prev, newCockroach]);
 
-      setTimeout(() => {
+      const removeTimeout = setTimeout(() => {
         setCockroaches((prev) => prev.filter((c) => c.id !== id));
       }, (newCockroach.duration + 0.5) * 1000);
+      roachTimeouts.push(removeTimeout);
+    };
 
-    }, 400); // 0.4秒間隔で常にチェックを行い、開始直後からターゲットを発進させます
+    spawnCockroach();
+    const spawnInterval = setInterval(spawnCockroach, 400);
 
-    // 3. 60秒経過時の強制ゲームオーバータイマー
+    // 3. 60秒経過時の強制ゲームオーバー
     const timer = setTimeout(async () => {
       const currentScore = stateRef.current.score;
-      await fetch('/api/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, score: currentScore, timeLeft: 0 })
-      });
-      setFinalScore(currentScore + 0);
+      if (user?.id) {
+        await fetch('/api/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, score: currentScore, timeLeft: 0 }),
+        });
+      }
+      setFinalScore(currentScore);
       setGameState('gameover');
       setCockroaches([]);
     }, 60000);
@@ -156,8 +156,9 @@ function App() {
       clearTimeout(timer);
       clearInterval(spawnInterval);
       clearInterval(countdown);
+      roachTimeouts.forEach(clearTimeout);
     };
-  }, [gameState]); 
+  }, [gameState, user]);
 
   // 的をクリックしたときのスコア加減算（面積が確保されたため、確実に動きます）
   const handleCockroachClick = async (id, type) => {
@@ -271,26 +272,21 @@ function App() {
 
       {/* 🎮 3. メインプレイ画面 */}
       {gameState === 'playing' && (
-        <div className="game-field-wrapper" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
-          
-          {/* スコアとタイマーを最前面に独立したパネルとして縦に配置 */}
-          <div className="score-board-panel" style={{ zIndex: 200, position: 'relative', display: 'flex', flexDirection: 'column', gap: '5px', padding: '15px', background: 'rgba(0,0,0,0.75)', color: 'white', borderBottomRightRadius: '12px', width: 'fit-content' }}>
-            <div className="score-display" style={{ fontSize: '26px', fontWeight: 'bold' }}>
+        <div className="game-field-wrapper">
+          <div className="score-board-panel">
+            <div className="score-display" style={{ fontSize: '26px' }}>
               退治数: <span style={{ color: '#00ff00', fontSize: '32px' }}>{score}</span> / 10
             </div>
-            <div className="timer-display" style={{ fontSize: '18px', color: '#ddd' }}>
+            <div className="timer-display">
               残り時間: <span style={{ fontWeight: 'bold', fontSize: '22px', color: '#fff' }}>{timeLeft}</span> 秒
             </div>
-            
-            {/* 30秒以下になった時だけ現れる警告赤文字 */}
             {timeLeft <= 30 && (
-              <div className="hard-mode-alert" style={{ color: '#ff3333', fontWeight: 'bold', fontSize: '18px', textShadow: '1px 1px 2px black', animation: 'blink 0.8s infinite', marginTop: '5px' }}>
+              <div className="hard-mode-alert" style={{ color: '#ff3333', fontWeight: 'bold', fontSize: '16px', textShadow: '1px 1px 2px black', animation: 'blink 0.8s infinite' }}>
                 🔥 HARD MODE：高速 ＆ 折り返し発生中！
               </div>
             )}
           </div>
 
-          {/* 背景のゴミ山と黒猫ロン君の配置 */}
           <div className="game-content">
             <div className="cat-header">
               <img src={blackCatImage} alt="Ron-kun" className="cat-image" />
@@ -300,19 +296,20 @@ function App() {
             </div>
           </div>
 
-          {/* ターゲット（絵文字 ＆ サイズ固定）のレンダリング */}
-          {cockroaches.map((roach) => (
-            <Cockroach
-              key={roach.id}
-              id={roach.id}
-              direction={roach.direction}
-              type={roach.type}
-              position={roach.position}
-              duration={roach.duration}
-              className={roach.isReverse ? 'roach-reverse' : ''}
-              onClick={handleCockroachClick}
-            />
-          ))}
+          <div className="cockroach-layer">
+            {cockroaches.map((roach) => (
+              <Cockroach
+                key={roach.id}
+                id={roach.id}
+                direction={roach.direction}
+                type={roach.type}
+                position={roach.position}
+                duration={roach.duration}
+                className={roach.isReverse ? 'roach-reverse' : ''}
+                onClick={handleCockroachClick}
+              />
+            ))}
+          </div>
         </div>
       )}
 
